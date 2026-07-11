@@ -1,6 +1,7 @@
 {
   "name": "real-time-payment-processing-gateway-be",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "type": "module",
   "main": "index.js",

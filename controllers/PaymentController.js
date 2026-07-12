@@ -1,7 +1,16 @@
 import { randomUUID } from "crypto";
 import Payment from "../models/Payment.js";
+import mongoose from "mongoose";
 
 const PRIMARY_DESTINATION_ACCOUNT = "PRIMARY_BANK_ACCOUNT";
+
+const ALLOWED_STATUS_TRANSITIONS = {
+  PENDING: ["PROCESSING", "CANCELLED"],
+  PROCESSING: ["COMPLETED", "FAILED"],
+  COMPLETED: [],
+  FAILED: [],
+  CANCELLED: [],
+};
 
 const generatePaymentId = () => {
   return `PAY-${Date.now()}-${randomUUID()
@@ -9,6 +18,7 @@ const generatePaymentId = () => {
     .toUpperCase()}`;
 };
 
+// Create a new payment
 export const createPayment = async (req, res) => {
   try {
     const {
@@ -84,6 +94,8 @@ export const createPayment = async (req, res) => {
   }
 };
 
+
+// Get a payment by payment ID
 export const getPaymentById = async (req, res) => {
   try {
     const payment = await Payment.findOne({
@@ -103,6 +115,156 @@ export const getPaymentById = async (req, res) => {
     });
   } catch (error) {
     console.error("Get payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to retrieve payment",
+    });
+  }
+};
+
+
+// Update payment status
+export const updatePaymentStatus = async (req, res) => {
+  try {
+    const { status, transactionId } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment status is required",
+      });
+    }
+
+    const normalizedStatus = String(status)
+      .trim()
+      .toUpperCase();
+
+    const validStatuses = Object.keys(ALLOWED_STATUS_TRANSITIONS);
+
+    if (!validStatuses.includes(normalizedStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid payment status. Allowed statuses: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    const payment = await Payment.findOne({
+      paymentId: req.params.paymentId,
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    const currentStatus = payment.status;
+
+    // Allow repeated same-status requests safely
+    if (currentStatus === normalizedStatus) {
+      return res.status(200).json({
+        success: true,
+        message: `Payment is already in ${normalizedStatus} status`,
+        data: payment,
+      });
+    }
+
+    const allowedNextStatuses =
+      ALLOWED_STATUS_TRANSITIONS[currentStatus] || [];
+
+    if (!allowedNextStatuses.includes(normalizedStatus)) {
+      return res.status(409).json({
+        success: false,
+        message: `Invalid status transition from ${currentStatus} to ${normalizedStatus}`,
+        allowedNextStatuses,
+      });
+    }
+
+    payment.status = normalizedStatus;
+
+    if (transactionId) {
+      payment.transactionId = String(transactionId).trim();
+    }
+
+    await payment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Payment status updated from ${currentStatus} to ${normalizedStatus}`,
+      data: payment,
+    });
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(error.errors)
+          .map((item) => item.message)
+          .join(", "),
+      });
+    }
+
+    console.error("Update payment status error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update payment status",
+    });
+  }
+};
+
+// Get all payments for admin
+export const getAllPayments = async (req, res) => {
+  try {
+    const payments = await Payment.find()
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Payments retrieved successfully",
+      count: payments.length,
+      data: payments,
+    });
+  } catch (error) {
+    console.error("Get all payments error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to retrieve payments",
+    });
+  }
+};
+
+// Get payment by MongoDB Object ID
+export const getPaymentByObjectId = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate MongoDB Object ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment object ID",
+      });
+    }
+
+    const payment = await Payment.findById(id);
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment retrieved successfully",
+      data: payment,
+    });
+  } catch (error) {
+    console.error("Get payment by object ID error:", error);
 
     return res.status(500).json({
       success: false,

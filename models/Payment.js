@@ -37,6 +37,18 @@ const paymentSchema = new mongoose.Schema(
       default: "",
     },
 
+    paymentMethod: {
+      type: String,
+      enum: ["CARD"],
+      default: null,
+    },
+
+    cardLastFourDigits: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
     status: {
       type: String,
       enum: [

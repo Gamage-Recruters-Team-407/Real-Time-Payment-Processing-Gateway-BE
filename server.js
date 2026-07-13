@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { connectDB } from './config/db.js';
 
 import otpRoutes from "./routes/otpRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ app.get("/", (req, res) => {
 
 // OTP routes
 app.use("/api/otp", otpRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 const PORT = process.env.PORT || 5000;
 

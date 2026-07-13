@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from './config/db.js';
 
+import otpRoutes from "./routes/otpRoutes.js";
+
 dotenv.config();
 
 const app = express();
@@ -13,6 +15,10 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("Backend is running...");
 });
+
+
+// OTP routes
+app.use("/api/otp", otpRoutes);
 
 const PORT = process.env.PORT || 5000;
 

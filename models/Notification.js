@@ -5,10 +5,12 @@ const notificationSchema = new mongoose.Schema(
         userId: {
             type: String,
             ref: "User",
+            required: [true, "User ID is required"],
         },
 
         title: {
             type: String,
+            required: [true, "Title is required"],
         },
 
         message: {
@@ -16,21 +18,38 @@ const notificationSchema = new mongoose.Schema(
             required: [true, "Message is required"],
         },
 
+        // Matches the categories used by the frontend NotificationCard component
         type: {
             type: String,
-            enum: ["Info", "Warning", "Error"],
-            default: "Info",
+            enum: [
+                "payment_success",
+                "payment_failed",
+                "settlement",
+                "security",
+                "otp",
+                "system",
+            ],
+            default: "system",
         },
-        
-        createdAt: {
-            type: Date,
-            default: Date.now,
+
+        read: {
+            type: Boolean,
+            default: false,
+        },
+
+        // Optional label shown on the frontend, e.g. "View receipt", "Resolve exception"
+        actionLabel: {
+            type: String,
+        },
+
+        // Optional deep link the frontend can route to when the card is clicked
+        link: {
+            type: String,
         },
     },
     {
-        timestamps: true,
+        timestamps: true, // gives us createdAt / updatedAt automatically
     }
 );
-
 
 export default mongoose.model("Notification", notificationSchema);

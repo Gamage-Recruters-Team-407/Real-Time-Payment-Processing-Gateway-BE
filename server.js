@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { connectDB } from './config/db.js';
 import paymentRoutes from "./routes/paymentRoutes.js";
 import otpRoutes from "./routes/otpRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
 import refundRoutes from "./routes/refundRoutes.js";
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.get("/", (req, res) => {
 
 // OTP routes
 app.use("/api/otp", otpRoutes);
+app.use("/api/transactions", transactionRoutes);
 
 // Payment routes
 app.use("/api/payments", paymentRoutes);

@@ -3,7 +3,7 @@
 // Owner: Developer 2
 
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js"; // Dev 13's JWT middleware
+import { default as protect } from "../middleware/authMiddleware.js";
 import { getDashboard, getProfile, updateProfile } from "../controllers/userController.js";
 
 const router = express.Router();

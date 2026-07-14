@@ -1,10 +1,11 @@
 import Refund from "../models/Refund.js";
+import * as refundService from "../services/refundService.js";
 
 export const createRefund = async (req, res) => {
   try {
-    const { name, transactionId, phone, reason, itemPhoto } = req.body;
+    const { name, transactionId, phone,  amount, reason, itemPhoto } = req.body;
 
-    if (!name || !transactionId || !phone || !reason || !itemPhoto) {
+    if (!name || !transactionId || !phone || !amount || !reason || !itemPhoto) {
       return res.status(400).json({
         success: false,
         message: "All fields including item photo are required.",
@@ -17,6 +18,7 @@ export const createRefund = async (req, res) => {
       phone: String(phone).trim(),
       reason: String(reason).trim(),
       itemPhoto, // Base64 image data URL
+      amount: Number(amount),
     });
 
     return res.status(201).json({
@@ -30,6 +32,93 @@ export const createRefund = async (req, res) => {
       success: false,
       message: "Unable to submit refund request",
       error: error.message,
+    });
+  }
+};
+
+export const getAllRefunds = async (req, res) => {
+  try {
+    const refunds = await refundService.getAllRefunds();
+
+    res.status(200).json(refunds);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getRefundById = async (req, res) => {
+  try {
+    const refund = await refundService.getRefundById(req.params.id);
+
+    if (!refund) {
+      return res.status(404).json({
+        message: "Refund not found",
+      });
+    }
+
+    res.status(200).json(refund);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const approveRefund = async (req, res) => {
+  try {
+    const refund = await refundService.updateRefundStatus(
+      req.params.id,
+      "APPROVED"
+    );
+
+    res.status(200).json(refund);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const rejectRefund = async (req, res) => {
+  try {
+    const refund = await refundService.updateRefundStatus(
+      req.params.id,
+      "REJECTED"
+    );
+
+    res.status(200).json(refund);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const refundPayment = async (req, res) => {
+  try {
+    const refund = await refundService.updateRefundStatus(
+      req.params.id,
+      "REFUNDED"
+    );
+
+    res.status(200).json(refund);
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+
+export const deleteRefund = async (req, res) => {
+  try {
+    await refundService.deleteRefund(req.params.id);
+
+    res.status(200).json({
+      message: "Refund deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
     });
   }
 };

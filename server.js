@@ -3,10 +3,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from './config/db.js';
 import paymentRoutes from "./routes/paymentRoutes.js";
-
+import authRoutes from "./routes/authRoutes.js";
 import otpRoutes from "./routes/otpRoutes.js";
-
-dotenv.config();
+ 
+dotenv.config({ path: "./.env" });
 
 const app = express();
 
@@ -23,6 +23,8 @@ app.use("/api/otp", otpRoutes);
 
 // Payment routes
 app.use("/api/payments", paymentRoutes);
+
+app.use("/api/auth" , authRoutes);
 
 const PORT = process.env.PORT || 5000;
 

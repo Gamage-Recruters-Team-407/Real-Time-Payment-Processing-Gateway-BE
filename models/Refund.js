@@ -17,6 +17,13 @@ const refundSchema = new mongoose.Schema(
       required: [true, "Phone number is required"],
       trim: true,
     },
+
+     amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    
     reason: {
       type: String,
       required: [true, "Reason for refund is required"],

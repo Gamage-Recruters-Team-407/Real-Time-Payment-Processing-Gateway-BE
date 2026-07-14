@@ -12,6 +12,7 @@ dotenv.config({ path: "./.env" });
 import transactionRoutes from "./routes/transactionRoutes.js";
 import refundRoutes from "./routes/refundRoutes.js";
 
+import userRoutes from "./routes/userRoutes.js";
 
 dotenv.config({ path: "./.env" });
 
@@ -49,6 +50,8 @@ app.use("/api/auth" , authRoutes);
 // Refund routes
 app.use("/api/refunds", refundRoutes);
 
+
+app.use("/api/users", userRoutes);
 
 
 const PORT = process.env.PORT || 5000;

@@ -1,40 +1,77 @@
 import mongoose from "mongoose";
 
-const transactionSchema = new mongoose.Schema(
-    {
-        paymentId: {
-            type: String,
-            ref: "Payment",
-        },
+const paymentSchema = new mongoose.Schema(
+  {
+    paymentId: {
+      type: String,
+      required: [true, "Payment ID is required"],
+      unique: true,
+      index: true,
+      trim: true,
+    },
 
-        userId: {
-            type: String,
-            ref: "User",
-        },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
 
-        amount: {
-            type: String,
-        },
+    amount: {
+      type: Number,
+      required: [true, "Amount is required"],
+      min: [0.01, "Amount must be greater than 0"],
+    },
 
-        transactionType: {
-            type: String,
-            enum: ["Credit", "Debit"],
-        },
+    currency: {
+      type: String,
+      enum: ["LKR"],
+      default: "LKR",
+      uppercase: true,
+      trim: true,
+    },
 
-        status: {
-            type: String,
-            enum: ["Pending", "Completed", "Failed"],
-        },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [255, "Description cannot exceed 255 characters"],
+      default: "",
+    },
 
-        referenceNo: {
-            type: String,
-        },
+    paymentMethod: {
+      type: String,
+      enum: ["CARD"],
+      default: null,
+    },
 
-        createdAt: {
-            type: Date,
-            default: Date.now,
-        }
-    }
+    status: {
+      type: String,
+      enum: [
+        "PENDING",
+        "PROCESSING",
+        "COMPLETED",
+        "FAILED",
+        "CANCELLED",
+      ],
+      default: "PENDING",
+      index: true,
+    },
+
+    destinationAccountKey: {
+      type: String,
+      default: "PRIMARY_BANK_ACCOUNT",
+      immutable: true,
+    },
+
+    transactionId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+  }
 );
 
-export default mongoose.model("Transaction", transactionSchema);
+export default mongoose.model("Payment", paymentSchema);

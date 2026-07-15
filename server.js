@@ -12,6 +12,7 @@ import otpRoutes from "./routes/otpRoutes.js";
 import transactionRoutes from "./routes/transactionRoutes.js";
 import refundRoutes from "./routes/refundRoutes.js";
 
+import userRoutes from "./routes/userRoutes.js";
 dotenv.config({ path: "./.env" });
 
 const app = express();
@@ -39,6 +40,7 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/refunds", refundRoutes);
 
+app.use("/api/users", userRoutes);
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {

@@ -1,11 +1,9 @@
 import User from "../models/User.js";
 import { generateToken } from "../config/jwt.js";
 
-// @desc    Register new user
-// @route   POST /api/auth/register
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, adminSecret } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Please fill all fields" });
@@ -16,7 +14,13 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const user = await User.create({ name, email, password });
+    
+    const role =
+      adminSecret && adminSecret === process.env.ADMIN_SECRET_KEY
+        ? "admin"
+        : "user";
+
+    const user = await User.create({ name, email, password, role });
     const token = generateToken(user._id, user.role);
 
     return res.status(201).json({
@@ -35,8 +39,8 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
+//  Login user
+
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -73,8 +77,6 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Get logged-in user profile
-// @route   GET /api/auth/me
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);

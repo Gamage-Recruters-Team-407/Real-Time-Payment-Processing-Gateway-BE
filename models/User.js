@@ -62,16 +62,52 @@ const userSchema = new mongoose.Schema(
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Please enter a valid email"],
     },
+
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     password: {
       type: String,
       required: [true, "Password is required"],
       minlength: 6,
       select: false,
     },
+
+    // Optional — supports Google OAuth login (no password set in that case)
+    googleId: {
+      type: String,
+      default: null,
+    },
+
+    // Matches the Admin Page / User Page split used across the app
+    // (Sidebar role="admin"|"user", Navbar role="admin"|"user")
     role: {
       type: String,
-      enum: ["user", "admin"],
-      default: "user",
+      enum: ["Admin", "User"],
+      default: "User",
+    },
+
+    // Shown as the small subtitle under the user's name in the Navbar
+    // (e.g. "Compliance access") — optional, admin-assignable label
+    accessLabel: {
+      type: String,
+      trim: true,
+      default: "Standard access",
+    },
+    loginAlertsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    rememberDeviceEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    recoveryEmail: {
+      type: String,
+      default: "",
     },
   },
   {

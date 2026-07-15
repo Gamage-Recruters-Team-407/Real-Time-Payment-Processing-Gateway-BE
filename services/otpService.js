@@ -28,7 +28,7 @@ const sendOTPEmail = async (email, otp) => {
     const transporter = createTransporter();
     
     const mailOptions = {
-        from: `"Payment Gateway" <${EMAIL_CONFIG.USER}>`,
+        from: `"GamagePay" <${EMAIL_CONFIG.USER}>`,
         to: email,
         subject: "Your OTP Verification Code",
         html: `

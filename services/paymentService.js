@@ -1,5 +1,4 @@
 import Payment from '../models/Payment.js';
-import Transaction from '../models/Transaction.js';
 import { validateCardDetails } from '../utils/validateCard.js';
 
 /**
@@ -29,46 +28,39 @@ export async function processCardPayment(paymentData) {
         
         // If MongoDB connection is active (readyState === 1)
         if (mongoose.connection && mongoose.connection.readyState === 1) {
-            // Create Payment record
+            // Create Payment record matching the Mongoose schema exactly
             const payment = new Payment({
-                userId,
-                amount: amount.toString(),
-                paymentMethod: "Credit Card",
+                paymentId: paymentData.paymentId || `PAY-${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`,
+                userId: userId && mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null,
+                amount: Number(amount),
+                currency: "LKR",
+                paymentMethod: "CARD",
                 cardLastFourDigits: lastFour,
-                status: "Completed",
+                status: "COMPLETED",
                 transactionId: generatedTransactionId
             });
-            await payment.save();
-
-            // Create Transaction record
-            const transaction = new Transaction({
-                paymentId: payment._id.toString(),
-                userId,
-                amount: amount.toString(),
-                transactionType: "Debit",
-                status: "Completed",
-                referenceNo: generatedReferenceNo
-            });
-            await transaction.save();
+            // DB Save disabled for testing per user request:
+            // await payment.save();
+            console.log("\n============================================\n[TEST LOG] Card Payment processed:\n", payment, "\n============================================\n");
 
             return {
                 success: true,
                 message: "Payment processed successfully",
-                paymentId: payment._id.toString(),
+                paymentId: payment.paymentId,
                 transactionId: payment.transactionId,
-                referenceNo: transaction.referenceNo,
-                amount: amount
+                referenceNo: generatedReferenceNo,
+                amount: Number(amount)
             };
         } else {
-            // MongoDB not connected (common when server.js runs before config/db.js is called)
+            // MongoDB not connected (fallback)
             console.warn("MongoDB connection offline. Falling back to simulated card processing success.");
             return {
                 success: true,
                 message: "Payment processed successfully (Simulated - DB offline)",
-                paymentId: `MOCK_PAY_${Date.now()}`,
+                paymentId: paymentData.paymentId || `PAY-MOCK-${Date.now()}`,
                 transactionId: generatedTransactionId,
                 referenceNo: generatedReferenceNo,
-                amount: amount
+                amount: Number(amount)
             };
         }
     } catch (err) {
@@ -76,10 +68,10 @@ export async function processCardPayment(paymentData) {
         return {
             success: true,
             message: `Payment processed successfully (Simulated - Error: ${err.message})`,
-            paymentId: `MOCK_PAY_${Date.now()}`,
+            paymentId: paymentData.paymentId || `PAY-MOCK-${Date.now()}`,
             transactionId: generatedTransactionId,
             referenceNo: generatedReferenceNo,
-            amount: amount
+            amount: Number(amount)
         };
     }
 }

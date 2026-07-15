@@ -11,6 +11,7 @@ import otpRoutes from "./routes/otpRoutes.js";
 dotenv.config({ path: "./.env" });
 import transactionRoutes from "./routes/transactionRoutes.js";
 import refundRoutes from "./routes/refundRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
 
 
 dotenv.config({ path: "./.env" });
@@ -49,6 +50,9 @@ app.use("/api/auth" , authRoutes);
 // Refund routes
 app.use("/api/refunds", refundRoutes);
 
+// Settings routes
+app.use("/api/settings", settingsRoutes);
+
 
 
 const PORT = process.env.PORT || 5000;
@@ -70,3 +74,4 @@ const startServer = async () => {
 
 
 startServer();
+// restart nodemon to load updated env configs

@@ -73,6 +73,18 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+    loginAlertsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    rememberDeviceEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    recoveryEmail: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

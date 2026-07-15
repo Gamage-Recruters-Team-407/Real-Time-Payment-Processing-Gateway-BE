@@ -1,6 +1,22 @@
 import Refund from "../models/Refund.js";
 import * as refundService from "../services/refundService.js";
 
+
+const generateRefundId = () => {
+
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  const random = Math.floor(1000 + Math.random() * 9000);
+
+  return `REF-${year}${month}${day}-${random}`;
+};
+
+
+
 export const createRefund = async (req, res) => {
   try {
     const { name, transactionId, phone,  amount, reason, itemPhoto } = req.body;
@@ -13,6 +29,7 @@ export const createRefund = async (req, res) => {
     }
 
     const refund = await Refund.create({
+      refundId: generateRefundId(),
       name: String(name).trim(),
       transactionId: String(transactionId).trim(),
       phone: String(phone).trim(),
@@ -66,46 +83,70 @@ export const getRefundById = async (req, res) => {
 
 export const approveRefund = async (req, res) => {
   try {
-    const refund = await refundService.updateRefundStatus(
+
+    const refund = await Refund.findByIdAndUpdate(
       req.params.id,
-      "APPROVED"
+      {
+        status: "APPROVED",
+        approvedDate: new Date(),
+      },
+      { new: true }
     );
 
     res.status(200).json(refund);
+
   } catch (error) {
+
     res.status(500).json({
       message: error.message,
     });
+
   }
 };
 
 export const rejectRefund = async (req, res) => {
   try {
-    const refund = await refundService.updateRefundStatus(
+
+    const refund = await Refund.findByIdAndUpdate(
       req.params.id,
-      "REJECTED"
+      {
+        status: "REJECTED",
+        approvedDate: null,
+      },
+      { new: true }
     );
 
     res.status(200).json(refund);
+
   } catch (error) {
+
     res.status(500).json({
       message: error.message,
     });
+
   }
 };
 
 export const refundPayment = async (req, res) => {
   try {
-    const refund = await refundService.updateRefundStatus(
+
+    const refund = await Refund.findByIdAndUpdate(
       req.params.id,
-      "REFUNDED"
+      {
+        status: "REFUNDED",
+        refundedDate: new Date(),
+      },
+      { new: true }
     );
 
     res.status(200).json(refund);
+
   } catch (error) {
+
     res.status(500).json({
       message: error.message,
     });
+
   }
 };
 
@@ -122,3 +163,5 @@ export const deleteRefund = async (req, res) => {
     });
   }
 };
+
+

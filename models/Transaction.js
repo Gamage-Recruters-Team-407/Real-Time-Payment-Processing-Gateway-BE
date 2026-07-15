@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 
 const transactionStatuses = ["Pending", "Processing", "Successful", "Failed", "Cancelled"];
+const SINGLE_SHOP_MERCHANT =
+  (process.env.SINGLE_SHOP_MERCHANT || process.env.SHOP_NAME || "Main Shop").trim();
 
 const lifecycleHistorySchema = new mongoose.Schema(
   {
@@ -37,6 +39,7 @@ const transactionSchema = new mongoose.Schema(
     merchantName: {
       type: String,
       required: [true, "Merchant name is required"],
+      default: SINGLE_SHOP_MERCHANT,
       trim: true,
     },
     customerName: {
@@ -56,7 +59,7 @@ const transactionSchema = new mongoose.Schema(
     currency: {
       type: String,
       trim: true,
-      default: "USD",
+      default: "LKR",
     },
     paymentMethod: {
       type: String,

@@ -28,7 +28,7 @@ class MLPredictor:
                 self.feature_names = joblib.load(features_path)
             logger.info("ML Models loaded successfully (if present).")
         except Exception as e:
-            logger.error(f"Error loading models: {e}")
+            logger.warning(f"Could not load ML models ({e}). The system will safely use the Rule Engine fallback.")
 
     def _extract_features(self, transaction):
         # Fallback to dummy features if real features are not well defined

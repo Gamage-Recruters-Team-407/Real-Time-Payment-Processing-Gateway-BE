@@ -1,8 +1,8 @@
 import FraudLog from '../models/FraudLog.js';
-import UserProfile from '../models/UserProfile.js';
 import Investigation from '../models/Investigation.js';
 import { evaluateRules } from './ruleEngine.js';
 import { calculateRisk } from './riskScore.js';
+import { mlClient } from './mlClient.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
@@ -10,9 +10,18 @@ export const fraudService = {
     // 1 & 2. Run rules
     const { ruleScore, reasons } = await evaluateRules(transactionData);
     
+    // Day 4: Call ML Model
+    let mlScore = null;
+    const mlResponse = await mlClient.predictFraud(transactionData);
+    if (mlResponse && mlResponse.probability > 0.5) {
+      mlScore = mlResponse.risk_score;
+      reasons.push(`AI Model identified suspicious pattern (${mlScore}% risk)`);
+    } else if (mlResponse) {
+      mlScore = mlResponse.risk_score;
+    }
+
     // 3 - 6. Calculate Risk Score and Status
-    // Assume mlScore comes from somewhere else later (Day 3), for now it's null
-    const { finalScore, status } = calculateRisk(ruleScore, null);
+    const { finalScore, status } = calculateRisk(ruleScore, mlScore);
 
     // Save to MongoDB
     const fraudLog = new FraudLog({
@@ -36,7 +45,7 @@ export const fraudService = {
       finalScore,
       status,
       ruleScore,
-      mlScore: null,
+      mlScore,
       reasons
     };
   },

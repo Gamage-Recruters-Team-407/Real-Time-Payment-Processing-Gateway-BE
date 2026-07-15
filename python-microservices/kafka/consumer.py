@@ -34,6 +34,7 @@ class TransactionConsumer:
             return
 
         logger.info("Starting Kafka consumer loop...")
+        logger.info("✅ SUCCESS: Python Fraud Detection Microservice is now RUNNING and actively monitoring transactions!")
         try:
             while True:
                 msg = self.consumer.poll(timeout=1.0)

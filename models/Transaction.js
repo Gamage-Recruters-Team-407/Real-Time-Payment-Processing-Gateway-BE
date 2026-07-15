@@ -93,7 +93,6 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-transactionSchema.index({ transactionId: 1 }, { unique: true });
 transactionSchema.index({ merchantName: 1 });
 transactionSchema.index({ status: 1 });
 transactionSchema.index({ createdAt: -1 });

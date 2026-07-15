@@ -1,77 +1,106 @@
 import mongoose from "mongoose";
 
-const paymentSchema = new mongoose.Schema(
-  {
-    paymentId: {
-      type: String,
-      required: [true, "Payment ID is required"],
-      unique: true,
-      index: true,
-      trim: true,
-    },
+const transactionStatuses = ["Pending", "Processing", "Successful", "Failed", "Cancelled"];
+const SINGLE_SHOP_MERCHANT =
+  (process.env.SINGLE_SHOP_MERCHANT || process.env.SHOP_NAME || "Main Shop").trim();
 
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+const lifecycleHistorySchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: transactionStatuses,
+      required: true,
+    },
+    previousStatus: {
+      type: String,
       default: null,
     },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    reason: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  { _id: false }
+);
 
+const transactionSchema = new mongoose.Schema(
+  {
+    transactionId: {
+      type: String,
+      required: [true, "Transaction ID is required"],
+      unique: true,
+      trim: true,
+    },
+    merchantName: {
+      type: String,
+      required: [true, "Merchant name is required"],
+      default: SINGLE_SHOP_MERCHANT,
+      trim: true,
+    },
+    customerName: {
+      type: String,
+      trim: true,
+    },
+    customerEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
     amount: {
       type: Number,
       required: [true, "Amount is required"],
-      min: [0.01, "Amount must be greater than 0"],
+      min: [0.01, "Amount must be greater than zero"],
     },
-
     currency: {
       type: String,
-      enum: ["LKR"],
-      default: "LKR",
-      uppercase: true,
       trim: true,
+      default: "LKR",
     },
-
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: "Unknown",
+    },
+    status: {
+      type: String,
+      enum: transactionStatuses,
+      default: "Pending",
+      required: true,
+    },
+    paymentReference: {
+      type: String,
+      trim: true,
+      index: true,
+    },
     description: {
       type: String,
       trim: true,
-      maxlength: [255, "Description cannot exceed 255 characters"],
       default: "",
     },
-
-    paymentMethod: {
-      type: String,
-      enum: ["CARD"],
-      default: null,
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
-
-    status: {
-      type: String,
-      enum: [
-        "PENDING",
-        "PROCESSING",
-        "COMPLETED",
-        "FAILED",
-        "CANCELLED",
-      ],
-      default: "PENDING",
-      index: true,
-    },
-
-    destinationAccountKey: {
-      type: String,
-      default: "PRIMARY_BANK_ACCOUNT",
-      immutable: true,
-    },
-
-    transactionId: {
-      type: String,
-      default: null,
-      trim: true,
+    lifecycleHistory: {
+      type: [lifecycleHistorySchema],
+      default: [],
     },
   },
   {
     timestamps: true,
-    versionKey: false,
   }
 );
 
-export default mongoose.model("Payment", paymentSchema);
+transactionSchema.index({ transactionId: 1 }, { unique: true });
+transactionSchema.index({ merchantName: 1 });
+transactionSchema.index({ status: 1 });
+transactionSchema.index({ createdAt: -1 });
+
+export const TRANSACTION_STATUSES = transactionStatuses;
+
+export default mongoose.model("Transaction", transactionSchema);

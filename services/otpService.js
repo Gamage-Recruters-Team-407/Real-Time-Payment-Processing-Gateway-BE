@@ -2,6 +2,7 @@ import { generateRandomOTP, getExpiryDate } from "../utils/generateOTP.js";
 import { saveOTP, getOTP, updateAttempts, deleteOTP } from "../utils/otpStore.js";
 import { OTP_CONFIG, getEmailConfig } from "../config/otp.js";
 import nodemailer from "nodemailer";
+import User from "../models/User.js"; 
 
 const createTransporter = () => {
     const EMAIL_CONFIG = getEmailConfig();
@@ -16,56 +17,80 @@ const createTransporter = () => {
     });
 };
 
-// Generate and send OTP email
 const sendOTPEmail = async (email, otp) => {
     const EMAIL_CONFIG = getEmailConfig();
     
     if (!EMAIL_CONFIG.USER || !EMAIL_CONFIG.PASS) {
-        console.log(`\n============================================`);
-        console.log(`[TESTING MODE] OTP for ${email} is: ${otp}`);
-        console.log(`============================================\n`);
+        console.log(`\n[TESTING MODE] OTP for ${email} is: ${otp}\n`);
         return;
     }
 
     const transporter = createTransporter();
     
     const mailOptions = {
-        from: `"Payment Gateway" <${EMAIL_CONFIG.USER}>`,
+        from: `"GamagePay" <${EMAIL_CONFIG.USER}>`,
         to: email,
-        subject: "Your OTP Verification Code", // සරල Subject එකක්
+        subject: "Your OTP Verification Code",
         html: `
             <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
                 <h2>OTP Verification</h2>
                 <p>Your OTP code is: <b style="font-size: 24px; color: #007bff;">${otp}</b></p>
                 <p>This code will expire in ${OTP_CONFIG.EXPIRY_MINUTES} minutes.</p>
-                <p>If you did not request this, please ignore this email.</p>
             </div>
         `,
     };
 
     try {
         console.log(`📧 Sending OTP email to ${email}...`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✅ Email sent successfully! Message ID: ${info.messageId}`);
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent successfully!`);
     } catch (error) {
         console.error(`❌ Failed to send email:`, error.message);
-        throw new Error("Failed to send OTP email. Please try again.");
+        throw new Error("Failed to send OTP email.");
     }
 };
 
-// OTP Generate 
+// ️ 1. OTP Generation (now works using either a User ID or an email address)
 export const generateOTPService = async (userId, email) => {
+    let finalUserId = userId;
+    let finalEmail = email;
+
+    // Scenario 1: Forgot Password (only email available; no User ID)
+    if (!finalUserId && finalEmail) {
+        const user = await User.findOne({ email: finalEmail });
+        if (!user) {
+            // For security reasons, it doesn't explicitly say "User not found."
+            // But let's simply trigger an error for this project.
+            throw new Error("This email is not associated with any user.");
+        }
+        finalUserId = user._id.toString(); // retrieving the userId from the database.
+    }
+
+    // Scenario 2: Payment (only userId available; no email)
+    if (finalUserId && !finalEmail) {
+        const user = await User.findById(finalUserId);
+        if (!user) {
+            throw new Error("User not found.");
+        }
+        finalEmail = user.email; // retrieving the email from the database
+    }
+
+    // Now we have both finalUserId and finalEmail.
+    if (!finalUserId || !finalEmail) {
+        throw new Error("A userId or email is required.");
+    }
+
     const otp = generateRandomOTP();
     const expiresAt = getExpiryDate();
-    const key = userId; // User ID
+    const key = finalUserId; // The userId is used as the key.
 
     saveOTP(key, otp, expiresAt);
-    await sendOTPEmail(email, otp);
+    await sendOTPEmail(finalEmail, otp);
 
     return { message: "OTP sent successfully", expiresAt };
 };
 
-// OTP Verify 
+// 2. OTP Verify (userId is mandatory here)
 export const verifyOTPService = async (userId, otp) => {
     const key = userId;
     const otpRecord = getOTP(key);
@@ -98,9 +123,25 @@ export const verifyOTPService = async (userId, otp) => {
     return { message: "OTP verified successfully", verified: true };
 };
 
-// OTP Resend 
+// 3. OTP Resend (userId or email is required)
 export const resendOTPService = async (userId, email) => {
-    const key = userId;
+    // For the resend operation as well, you first need to retrieve the userId and email.
+    let finalUserId = userId;
+    let finalEmail = email;
+
+    if (!finalUserId && finalEmail) {
+        const user = await User.findOne({ email: finalEmail });
+        if (!user) throw new Error("User not found.");
+        finalUserId = user._id.toString();
+    }
+
+    if (finalUserId && !finalEmail) {
+        const user = await User.findById(finalUserId);
+        if (!user) throw new Error("User not found.");
+        finalEmail = user.email;
+    }
+
+    const key = finalUserId;
     const otpRecord = getOTP(key);
 
     if (otpRecord) {
@@ -116,5 +157,5 @@ export const resendOTPService = async (userId, email) => {
         }
     }
 
-    return await generateOTPService(userId, email);
+    return await generateOTPService(finalUserId, finalEmail);
 };

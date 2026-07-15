@@ -1,14 +1,20 @@
 import Refund from "../models/Refund.js";
+import Transaction from "../models/Transaction.js";
 import * as refundService from "../services/refundService.js";
 
 export const createRefund = async (req, res) => {
   try {
-    const { name, transactionId, phone,  amount, reason, itemPhoto } = req.body;
+    let { name, transactionId, phone, amount, reason, itemPhoto } = req.body;
 
-    if (!name || !transactionId || !phone || !amount || !reason || !itemPhoto) {
+    if ((amount === undefined || amount === null) && transactionId) {
+      const txn = await Transaction.findOne({ transactionId: String(transactionId).trim() });
+      amount = txn ? txn.amount : 0.0;
+    }
+
+    if (!name || !transactionId || !phone || amount === undefined || amount === null || !reason || !itemPhoto) {
       return res.status(400).json({
         success: false,
-        message: "All fields including item photo are required.",
+        message: "All fields including item photo and amount are required.",
       });
     }
 

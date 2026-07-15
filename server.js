@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { connectDB } from "./config/db.js";
+import { initNeo4j } from "./services/neo4j.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import fraudRoutes from "./routes/fraudRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -43,6 +44,7 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
+    await initNeo4j();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

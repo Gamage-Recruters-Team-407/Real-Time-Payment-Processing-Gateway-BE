@@ -1,11 +1,11 @@
 import User from "../models/User.js";
 import { generateToken } from "../config/jwt.js";
 
-// @desc    Register new user
-// @route   POST /api/auth/register
+//    Register new user
+
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, adminSecret } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: "Please fill all fields" });
@@ -16,7 +16,12 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const user = await User.create({ name, email, password });
+    const role =
+      adminSecret && adminSecret === process.env.ADMIN_SECRET_KEY
+        ? "admin"
+        : "user";
+
+    const user = await User.create({ name, email, password, role });
     const token = generateToken(user._id, user.role);
 
     return res.status(201).json({
@@ -35,8 +40,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
+//     Login user
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -73,8 +77,8 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Get logged-in user profile
-// @route   GET /api/auth/me
+//     Get logged-in user profile
+
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -84,6 +88,59 @@ export const getMe = async (req, res) => {
     return res.status(200).json({ user });
   } catch (error) {
     console.error("GET ME ERROR:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+     
+      console.log(`[TODO] Send OTP to ${user.email} - waiting on Dev 5's otpService`);
+    }
+
+    return res.status(200).json({
+      message: "If an account exists with this email, a reset code has been sent.",
+    });
+  } catch (error) {
+    console.error("FORGOT PASSWORD ERROR:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ message: "Email and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // user.password = newPassword;
+    // await user.save();
+    user.password = newPassword;
+    await user.save({ validateModifiedOnly: true });
+
+    return res.status(200).json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };

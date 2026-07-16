@@ -25,6 +25,7 @@ export const createPayment = async (req, res) => {
       amount,
       currency = "LKR",
       description = "",
+      paymentMethod = "CARD",
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -47,6 +48,17 @@ export const createPayment = async (req, res) => {
       });
     }
 
+    const normalizedPaymentMethod = String(paymentMethod)
+      .trim()
+      .toUpperCase();
+
+    if (normalizedPaymentMethod !== "CARD") {
+      return res.status(400).json({
+        success: false,
+        message: "Only CARD payment method is currently available",
+      });
+    }
+
     const payment = await Payment.create({
       paymentId: generatePaymentId(),
 
@@ -57,6 +69,8 @@ export const createPayment = async (req, res) => {
       currency: normalizedCurrency,
 
       description: String(description).trim(),
+
+      paymentMethod: normalizedPaymentMethod,
 
       status: "PENDING",
 

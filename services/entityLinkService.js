@@ -1,59 +1,106 @@
-import { runCypher } from '../services/neo4j.js';
+import FraudLog from '../models/FraudLog.js';
 
 export const entityLinkService = {
   getEntityGraph: async (id) => {
-    const query = `
-      MATCH (a:Account {id: $id})-[r]-(connected)
-      RETURN a, r, connected
-      LIMIT 100
-    `;
-    
     try {
-      const records = await runCypher(query, { id });
+      let seedId = id;
       
-      if (!records || records.length === 0) {
-        return {
-          nodes: [],
-          edges: [],
-          summary: { totalNodes: 0, totalEdges: 0, fraudRing: false, riskLevel: "LOW", clusterSize: 0 }
-        };
+      // If default ID, try to get the most recent transaction's user
+      if (seedId === 'USER-DEFAULT') {
+        const recentTx = await FraudLog.findOne().sort({ createdAt: -1 });
+        if (recentTx) {
+          seedId = recentTx.userId;
+        }
+      }
+
+      // Find all transactions associated with this user ID
+      let transactions = await FraudLog.find({ userId: seedId });
+      
+      if (!transactions || transactions.length === 0) {
+        // Fallback: just try to get the latest transaction from any user
+        const recentTx = await FraudLog.findOne().sort({ createdAt: -1 });
+        if (recentTx) {
+          seedId = recentTx.userId;
+          transactions = await FraudLog.find({ userId: seedId });
+        }
+        
+        // If still empty, return default empty state
+        if (!transactions || transactions.length === 0) {
+          return {
+            nodes: [],
+            edges: [],
+            summary: { totalNodes: 0, totalEdges: 0, fraudRing: false, riskLevel: "LOW", clusterSize: 0 },
+            seedId: null
+          };
+        }
       }
       
       const nodesMap = new Map();
       const edges = [];
       
-      records.forEach(record => {
-        const a = record.get('a');
-        const connected = record.get('connected');
-        const r = record.get('r');
-        
-        if (!nodesMap.has(a.identity.toString())) {
-          nodesMap.set(a.identity.toString(), { id: a.properties.id || a.identity.toString(), type: a.labels[0].toLowerCase(), label: a.labels[0], risk: a.properties.risk || 0 });
+      // Central Node: The Account (User)
+      const accountNodeId = seedId;
+      nodesMap.set(accountNodeId, { id: accountNodeId, type: "account", label: "Account", risk: 0 });
+      
+      transactions.forEach(tx => {
+        // IP Node
+        if (tx.ip && tx.ip !== 'Unknown') {
+          if (!nodesMap.has(tx.ip)) {
+            nodesMap.set(tx.ip, { id: tx.ip, type: "ip", label: "Ip", risk: 0 });
+          }
+          // Only add edge if it doesn't already exist to prevent duplicates
+          if (!edges.some(e => e.from === accountNodeId && e.to === tx.ip && e.type === "USES_IP")) {
+            edges.push({ from: accountNodeId, to: tx.ip, type: "USES_IP" });
+          }
         }
-        if (!nodesMap.has(connected.identity.toString())) {
-          nodesMap.set(connected.identity.toString(), { id: connected.properties.id || connected.properties.address || connected.identity.toString(), type: connected.labels[0].toLowerCase(), label: connected.labels[0], risk: connected.properties.risk || 0 });
+        
+        // Device Node
+        if (tx.deviceId && tx.deviceId !== 'Unknown') {
+          if (!nodesMap.has(tx.deviceId)) {
+            nodesMap.set(tx.deviceId, { id: tx.deviceId, type: "device", label: "Device", risk: 0 });
+          }
+          if (!edges.some(e => e.from === accountNodeId && e.to === tx.deviceId && e.type === "USES_DEVICE")) {
+            edges.push({ from: accountNodeId, to: tx.deviceId, type: "USES_DEVICE" });
+          }
         }
         
-        edges.push({
-          from: a.properties.id || a.identity.toString(),
-          to: connected.properties.id || connected.properties.address || connected.identity.toString(),
-          type: r.type
-        });
+        // Merchant Node
+        if (tx.merchant && tx.merchant !== 'Unknown') {
+          if (!nodesMap.has(tx.merchant)) {
+            nodesMap.set(tx.merchant, { id: tx.merchant, type: "merchant", label: "Merchant", risk: 0 });
+          }
+          if (!edges.some(e => e.from === accountNodeId && e.to === tx.merchant && e.type === "PAYMENT_TO")) {
+            edges.push({ from: accountNodeId, to: tx.merchant, type: "PAYMENT_TO" });
+          }
+        }
+        
+        // Transaction Node
+        if (tx.transactionId) {
+          if (!nodesMap.has(tx.transactionId)) {
+            nodesMap.set(tx.transactionId, { id: tx.transactionId, type: "transaction", label: "Transaction", risk: 0 });
+          }
+          if (!edges.some(e => e.from === accountNodeId && e.to === tx.transactionId && e.type === "PERFORMED")) {
+            edges.push({ from: accountNodeId, to: tx.transactionId, type: "PERFORMED" });
+          }
+        }
       });
       
+      const nodes = Array.from(nodesMap.values());
+      
       return {
-         nodes: Array.from(nodesMap.values()),
+         nodes,
          edges,
          summary: {
-           totalNodes: nodesMap.size,
+           totalNodes: nodes.length,
            totalEdges: edges.length,
-           fraudRing: nodesMap.size >= 3,
+           fraudRing: nodes.length >= 3, // Simplistic fraud ring logic matching previous behavior
            riskLevel: "HIGH",
-           clusterSize: nodesMap.size
-         }
+           clusterSize: nodes.length
+         },
+         seedId: accountNodeId
       };
     } catch (e) {
-      console.error("Neo4j graph error:", e.message);
+      console.error("MongoDB entity link graph error:", e.message);
       return {
          nodes: [],
          edges: [],

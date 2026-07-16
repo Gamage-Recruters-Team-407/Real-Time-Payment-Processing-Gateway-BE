@@ -3,8 +3,22 @@ import { body } from 'express-validator';
 import userController from '../controllers/userController.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import adminMiddleware from '../middleware/adminMiddleware.js';
+import { default as protect } from "../middleware/authMiddleware.js";
+import { getDashboard, getProfile, updateProfile } from "../controllers/userController.js";
 
 const router = express.Router();
+
+
+ 
+// GET  /api/users/me       -> Dashboard.jsx uses this
+router.get("/me", protect, getDashboard);
+ 
+// GET  /api/users/profile  -> Profile.jsx uses this
+router.get("/profile", protect, getProfile);
+ 
+// PUT  /api/users/profile  -> Profile.jsx "Save Changes" uses this
+router.put("/profile", protect, updateProfile);
+
 
 // List & search users (admin-only)
 router.get('/', authMiddleware, adminMiddleware, userController.listUsers);

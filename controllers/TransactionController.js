@@ -1,10 +1,25 @@
 import mongoose from "mongoose";
 import Transaction, { TRANSACTION_STATUSES } from "../models/Transaction.js";
+import Refund from "../models/Refund.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
+const DEFAULT_CURRENCY = "LKR";
+const SINGLE_SHOP_MERCHANT =
+  (process.env.SINGLE_SHOP_MERCHANT || process.env.SHOP_NAME || "Main Shop").trim();
+
+const ALLOWED_STATUS_TRANSITIONS = {
+  Pending: ["Processing", "Successful", "Failed", "Cancelled"],
+  Processing: ["Successful", "Failed", "Cancelled"],
+  Successful: [],
+  Failed: [],
+  Cancelled: [],
+};
 
 const isValidStatus = (status) => TRANSACTION_STATUSES.includes(status);
+
+const generateTransactionId = () =>
+  `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
 const parsePositiveNumber = (value) => {
   if (value === undefined || value === null || value === "") {
@@ -80,13 +95,13 @@ const buildQuery = (query) => {
 };
 
 const normalizeTransaction = (payload = {}) => ({
-  transactionId: (payload.transactionId || "").trim(),
-  merchantName: (payload.merchantName || "").trim(),
+  transactionId: (payload.transactionId || generateTransactionId()).trim(),
+  merchantName: SINGLE_SHOP_MERCHANT,
   customerName: (payload.customerName || "").trim(),
   customerEmail: (payload.customerEmail || "").trim(),
   amount: payload.amount,
-  currency: (payload.currency || "USD").trim(),
-  paymentMethod: (payload.paymentMethod || "").trim(),
+  currency: (payload.currency || DEFAULT_CURRENCY).trim().toUpperCase(),
+  paymentMethod: (payload.paymentMethod || "Unknown").trim(),
   status: (payload.status || "Pending").trim(),
   paymentReference: (payload.paymentReference || "").trim(),
   description: (payload.description || "").trim(),
@@ -144,27 +159,114 @@ const buildCsv = (transactions) => {
   return [headers.join(","), ...rows].join("\n");
 };
 
+const buildSummary = (transactions, total) => {
+  const summary = {
+    totalTransactions: total,
+    totalAmount: 0,
+    pendingCount: 0,
+    processingCount: 0,
+    successfulCount: 0,
+    failedCount: 0,
+    cancelledCount: 0,
+  };
+
+  transactions.forEach((transaction) => {
+    summary.totalAmount += Number(transaction.amount) || 0;
+
+    switch (transaction.status) {
+      case "Pending":
+        summary.pendingCount += 1;
+        break;
+      case "Processing":
+        summary.processingCount += 1;
+        break;
+      case "Successful":
+        summary.successfulCount += 1;
+        break;
+      case "Failed":
+        summary.failedCount += 1;
+        break;
+      case "Cancelled":
+        summary.cancelledCount += 1;
+        break;
+      default:
+        break;
+    }
+  });
+
+  return summary;
+};
+
+const attachRefundSummary = async (transactions) => {
+  if (!transactions.length) {
+    return transactions;
+  }
+
+  const transactionIds = transactions
+    .map((transaction) => transaction.transactionId)
+    .filter(Boolean);
+
+  if (!transactionIds.length) {
+    return transactions;
+  }
+
+  const refunds = await Refund.find({
+    transactionId: { $in: transactionIds },
+  })
+    .select("transactionId status amount createdAt")
+    .lean();
+
+  const refundsByTransactionId = refunds.reduce((accumulator, refund) => {
+    const current = accumulator.get(refund.transactionId) || [];
+    current.push(refund);
+    accumulator.set(refund.transactionId, current);
+    return accumulator;
+  }, new Map());
+
+  return transactions.map((transaction) => {
+    const relatedRefunds =
+      refundsByTransactionId.get(transaction.transactionId) || [];
+
+    return {
+      ...transaction,
+      refundSummary: {
+        hasRefundRequest: relatedRefunds.length > 0,
+        refundCount: relatedRefunds.length,
+        latestRefundStatus:
+          relatedRefunds.length > 0
+            ? relatedRefunds[relatedRefunds.length - 1].status
+            : null,
+      },
+    };
+  });
+};
+
 export const getTransactions = async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || DEFAULT_PAGE, 1);
     const limit = Math.max(parseInt(req.query.limit, 10) || DEFAULT_LIMIT, 1);
     const query = buildQuery(req.query);
 
-    const [transactions, total] = await Promise.all([
+    const [transactions, total, allMatchingTransactions] = await Promise.all([
       Transaction.find(query)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),
       Transaction.countDocuments(query),
+      Transaction.find(query).select("amount status").lean(),
     ]);
 
+    const transactionsWithRefunds = await attachRefundSummary(transactions);
+
     return res.json({
-      transactions,
+      transactions: transactionsWithRefunds,
       total,
       currentPage: page,
       totalPages: Math.max(Math.ceil(total / limit), 1),
       pageSize: limit,
+      merchantName: SINGLE_SHOP_MERCHANT,
+      summary: buildSummary(allMatchingTransactions, total),
     });
   } catch (error) {
     console.error("Failed to fetch transactions:", error);
@@ -184,24 +286,44 @@ export const getTransactionById = async (req, res) => {
       return res.status(404).json({ message: "Transaction not found" });
     }
 
-    return res.json(transaction);
+    const [transactionWithRefunds] = await attachRefundSummary([transaction]);
+
+    return res.json(transactionWithRefunds);
   } catch (error) {
     console.error("Failed to fetch transaction:", error);
     return res.status(500).json({ message: "Failed to fetch transaction" });
   }
 };
 
+export const getTransactionHistory = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "Invalid transaction ID" });
+    }
+
+    const transaction = await Transaction.findById(req.params.id)
+      .select("transactionId merchantName status lifecycleHistory")
+      .lean();
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    return res.json({
+      transactionId: transaction.transactionId,
+      merchantName: transaction.merchantName,
+      currentStatus: transaction.status,
+      lifecycleHistory: transaction.lifecycleHistory || [],
+    });
+  } catch (error) {
+    console.error("Failed to fetch transaction history:", error);
+    return res.status(500).json({ message: "Failed to fetch transaction history" });
+  }
+};
+
 export const createTransaction = async (req, res) => {
   try {
     const payload = normalizeTransaction(req.body);
-
-    if (!payload.transactionId) {
-      return res.status(400).json({ message: "Transaction ID is required" });
-    }
-
-    if (!payload.merchantName) {
-      return res.status(400).json({ message: "Merchant name is required" });
-    }
 
     const amount = Number(payload.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -230,7 +352,11 @@ export const createTransaction = async (req, res) => {
       ],
     });
 
-    return res.status(201).json(transaction);
+    const [transactionWithRefunds] = await attachRefundSummary([
+      transaction.toObject(),
+    ]);
+
+    return res.status(201).json(transactionWithRefunds);
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(400).json({ message: "Transaction ID already exists" });
@@ -263,6 +389,16 @@ export const updateTransactionStatus = async (req, res) => {
       return res.status(400).json({ message: "Transaction already has this status" });
     }
 
+    const allowedNextStatuses =
+      ALLOWED_STATUS_TRANSITIONS[transaction.status] || [];
+
+    if (!allowedNextStatuses.includes(status)) {
+      return res.status(409).json({
+        message: `Invalid transaction status transition from ${transaction.status} to ${status}`,
+        allowedNextStatuses,
+      });
+    }
+
     const previousStatus = transaction.status;
     transaction.status = status;
     transaction.lifecycleHistory.push({
@@ -274,7 +410,11 @@ export const updateTransactionStatus = async (req, res) => {
 
     const updatedTransaction = await transaction.save();
 
-    return res.json(updatedTransaction);
+    const [transactionWithRefunds] = await attachRefundSummary([
+      updatedTransaction.toObject(),
+    ]);
+
+    return res.json(transactionWithRefunds);
   } catch (error) {
     console.error("Failed to update transaction status:", error);
     return res.status(500).json({ message: "Failed to update transaction status" });

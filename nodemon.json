@@ -1,0 +1,24 @@
+{
+  "watch": [
+    "server.js",
+    "routes",
+    "controllers",
+    "models",
+    "services",
+    "config",
+    "middleware",
+    "utils"
+  ],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "node_modules/*",
+    ".git/*",
+    "package-lock.json",
+    "package.json",
+    "docker-compose.yml",
+    "python-microservices/*",
+    "**/*.pyc",
+    "**/*.log",
+    ".env*"
+  ]
+}

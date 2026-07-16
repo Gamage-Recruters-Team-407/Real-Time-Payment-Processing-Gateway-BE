@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "seed:transactions": "node scripts/seedTransactions.js"
   },
   "keywords": [],
   "author": "",

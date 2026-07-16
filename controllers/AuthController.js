@@ -18,8 +18,8 @@ export const registerUser = async (req, res) => {
 
     const role =
       adminSecret && adminSecret === process.env.ADMIN_SECRET_KEY
-        ? "admin"
-        : "user";
+        ? "Admin"
+        : "User";
 
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user._id, user.role);

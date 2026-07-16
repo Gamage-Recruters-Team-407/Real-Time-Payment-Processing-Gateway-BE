@@ -40,7 +40,7 @@ const paymentSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       enum: ["CARD"],
-      default: null,
+      default: "CARD"
     },
 
     cardLastFourDigits: {

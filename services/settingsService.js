@@ -27,7 +27,7 @@ export const getSettings = async (userId) => {
     .limit(5);
 
   return {
-    loginAlertsEnabled: user.loginAlertsEnabled ?? true,
+    loginAlertsEnabled: user.loginAlertsEnabled ?? false,
     rememberDeviceEnabled: user.rememberDeviceEnabled ?? true,
     recoveryEmail: user.recoveryEmail || user.email,
     activities: activities.map(act => ({
@@ -61,7 +61,10 @@ export const updatePassword = async (userId, currentPassword, newPassword) => {
   if (!user) throw new Error("User not found");
 
   const isMatch = await user.comparePassword(currentPassword);
-  if (!isMatch) throw new Error("Incorrect current password");
+  if (!isMatch) {
+    await logActivity(userId, "Failed Password Change", "System", "Warning");
+    throw new Error("Incorrect current password");
+  }
 
   user.password = newPassword;
   await user.save();
@@ -70,12 +73,13 @@ export const updatePassword = async (userId, currentPassword, newPassword) => {
   return { message: "Password updated successfully" };
 };
 
-export const logActivity = async (userId, activity, device, status) => {
+export const logActivity = async (userId, activity, device, status, ip = "") => {
   return await LoginActivity.create({
     userId,
     activity,
     device,
-    status
+    status,
+    ip
   });
 };
 

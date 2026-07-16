@@ -15,6 +15,10 @@ const loginActivitySchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    ip: {
+      type: String,
+      default: "",
+    },
     status: {
       type: String,
       enum: ["Success", "Warning"],

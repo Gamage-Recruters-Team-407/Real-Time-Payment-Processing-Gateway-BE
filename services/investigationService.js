@@ -95,17 +95,12 @@ export const investigationService = {
           await new Blacklist({ entityType: 'USER', entityValue: alert.userId, reason, addedBy: performedBy }).save();
         } catch(e) {}
       }
-    } else if (actionUpper === 'ESCALATE') {
-      investigation.status = 'ESCALATED';
-      investigation.priority = 'CRITICAL';
-      investigation.escalatedBy = performedBy;
-      investigation.escalationReason = reason;
-      investigation.timeline.push({ event: `Escalated by ${performedBy}`, timestamp: new Date() });
+
     } else if (actionUpper === 'CLOSE') {
       investigation.status = 'CLOSED';
       investigation.timeline.push({ event: `Closed by ${performedBy}. Reason: ${reason}`, timestamp: new Date() });
     } else {
-      throw new Error("Invalid action type. Must be APPROVE, BLOCK, ESCALATE, CLOSE.");
+      throw new Error("Invalid action type. Must be APPROVE, BLOCK, CLOSE.");
     }
 
     await investigation.save();

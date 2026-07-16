@@ -56,6 +56,6 @@ class FraudDetector:
             "verdict": verdict,
             "rule_score": rule_score,
             "ml_probability": ml_probability,
-            "final_score": final_score,
+            "final_score": final_score if final_score is not None else (rule_score / 100.0),
             "reasons": reasons
         }

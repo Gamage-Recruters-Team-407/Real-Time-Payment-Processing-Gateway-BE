@@ -1,11 +1,39 @@
 import json
+import warnings
+import logging
+import os
 from flask import Flask, request, jsonify
 from services.fraud_detector import FraudDetector
 
+# Suppress all warnings to keep terminal clean
+warnings.filterwarnings("ignore")
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 app = Flask(__name__)
 
-# Initialize single instance of FraudDetector for the API
-fraud_detector = FraudDetector(config_path="config/rules.json")
+try:
+    # Initialize single instance of FraudDetector for the API
+    fraud_detector = FraudDetector(config_path="config/rules.json")
+    
+    print("\n" + "="*50)
+    print("✅ Rule engine initialized successfully.")
+    
+    # Check if ML model actually loaded successfully
+    if fraud_detector.ml_predictor.model is not None:
+        print("✅ ML service running successfully.")
+    else:
+        print("⚠️ ML models not found or failed to load. Using Rule Engine fallback.")
+        
+    print("🚀 Fraud Detection API is listening on http://0.0.0.0:5005")
+    print("="*50 + "\n")
+    
+except Exception as e:
+    print("\n" + "="*50)
+    print(f"❌ ERROR: Failed to start Rule Engine or Fraud Detector: {e}")
+    print("="*50 + "\n")
+    import sys
+    sys.exit(1)
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -58,4 +86,4 @@ def handle_config():
             return jsonify({"error": f"Failed to update config: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5005, debug=True)
+    app.run(host="0.0.0.0", port=5005, debug=False)

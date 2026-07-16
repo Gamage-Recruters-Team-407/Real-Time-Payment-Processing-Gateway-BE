@@ -18,7 +18,7 @@ const fraudLogSchema = new mongoose.Schema({
   mlScore: { type: Number },
   status: { 
     type: String, 
-    enum: ['CLEARED', 'REVIEW', 'HIGH_RISK', 'BLOCKED', 'ESCALATED'], 
+    enum: ['CLEARED', 'LOW_RISK', 'MEDIUM_RISK', 'REVIEW', 'UNDER_REVIEW', 'HIGH_RISK', 'BLOCKED', 'ESCALATED'], 
     default: 'REVIEW' 
   },
   alertReason: { type: String },

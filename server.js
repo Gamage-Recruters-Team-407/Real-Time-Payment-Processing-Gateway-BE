@@ -13,6 +13,7 @@ import transactionRoutes from "./routes/transactionRoutes.js";
 import refundRoutes from "./routes/refundRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import userPaymentHistoryRoutes from "./routes/userPaymentHistoryRoutes.js";
 
 dotenv.config({ path: "./.env" });
 
@@ -42,6 +43,7 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/refunds", refundRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/user-payment-history", userPaymentHistoryRoutes);
 
 const PORT = process.env.PORT || 5000;
 

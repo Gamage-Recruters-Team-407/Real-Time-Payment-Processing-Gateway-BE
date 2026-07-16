@@ -45,12 +45,17 @@ app.use("/api/users", userRoutes);
 
 const PORT = process.env.PORT || 5000;
 
+import { mlClient } from "./services/mlClient.js";
+
 const startServer = async () => {
   try {
     await connectDB();
     await initNeo4j();
-    app.listen(PORT, () => {
+    
+    app.listen(PORT, async () => {
       console.log(`Server running on port ${PORT}`);
+      // Ping the ML microservice on startup to show success message
+      await mlClient.verifyConnection();
     });
   } catch (error) {
     console.error("Failed to connect to database:", error);

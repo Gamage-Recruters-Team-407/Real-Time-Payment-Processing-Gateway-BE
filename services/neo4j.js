@@ -2,13 +2,18 @@ import neo4j from 'neo4j-driver';
 import dotenv from 'dotenv';
 dotenv.config({ path: './.env' });
 
-const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-const user = process.env.NEO4J_USER || 'neo4j';
-const password = process.env.NEO4J_PASSWORD || 'neo4j';
+const uri = process.env.NEO4J_URI;
+const user = process.env.NEO4J_USER;
+const password = process.env.NEO4J_PASSWORD;
 
 let driver;
 
 export const initNeo4j = async () => {
+  if (!uri || !user || !password) {
+    console.info('ℹ️ Neo4j integration skipped because NEO4J_URI, NEO4J_USER, or NEO4J_PASSWORD is not configured.');
+    return;
+  }
+
   try {
     driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
     // Verify connection

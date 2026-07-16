@@ -33,7 +33,6 @@ const transactionSchema = new mongoose.Schema(
     transactionId: {
       type: String,
       required: [true, "Transaction ID is required"],
-      unique: true,
       trim: true,
     },
     merchantName: {
@@ -96,7 +95,6 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-transactionSchema.index({ transactionId: 1 }, { unique: true });
 transactionSchema.index({ merchantName: 1 });
 transactionSchema.index({ status: 1 });
 transactionSchema.index({ createdAt: -1 });

@@ -1,6 +1,7 @@
 import User from "../models/User.js";
-import { generateToken, verifyResetToken } from "../config/jwt.js";
-import { logActivity } from "../services/settingsService.js";
+import { generateToken } from "../config/jwt.js";
+
+//    Register new user
 
 export const registerUser = async (req, res) => {
   try {
@@ -20,18 +21,8 @@ export const registerUser = async (req, res) => {
         ? "admin"
         : "user";
 
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role,
-    });
-
-    const token = generateToken(
-      user._id,
-      user.role,
-      user.rememberDeviceEnabled ? "30d" : undefined
-    );
+    const user = await User.create({ name, email, password, role });
+    const token = generateToken(user._id, user.role);
 
     return res.status(201).json({
       message: "User registered successfully",
@@ -45,14 +36,11 @@ export const registerUser = async (req, res) => {
     });
   } catch (error) {
     console.error("REGISTER ERROR:", error);
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// Login user
+//     Login user
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -62,75 +50,16 @@ export const loginUser = async (req, res) => {
     }
 
     const user = await User.findOne({ email }).select("+password");
-
     if (!user) {
-      return res.status(401).json({
-        message: "Invalid email or password",
-      });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
     const isMatch = await user.comparePassword(password);
-
     if (!isMatch) {
-      return res.status(401).json({
-        message: "Invalid email or password",
-      });
+      return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = generateToken(
-      user._id,
-      user.role,
-      user.rememberDeviceEnabled ? "30d" : undefined
-    );
-
-    // Detect device name from user-agent header
-    const userAgent = req.headers["user-agent"] || "Unknown Device";
-
-    const rawDevice = userAgent.includes("Chrome")
-      ? "Chrome"
-      : userAgent.includes("Firefox")
-      ? "Firefox"
-      : userAgent.includes("Safari")
-      ? "Safari"
-      : "System";
-
-    const clientIp =
-      req.ip || req.headers["x-forwarded-for"] || "127.0.0.1";
-
-    // Query database to check if this device was logged in previously by this user
-    const LoginActivity = (
-      await import("../models/LoginActivity.js")
-    ).default;
-
-    const knownDevice = await LoginActivity.findOne({
-      userId: user._id,
-      device: rawDevice,
-    });
-
-    if (!knownDevice) {
-      // New device login
-      if (user.loginAlertsEnabled) {
-        const { sendLoginAlertEmail } = await import(
-          "../services/settingsService.js"
-        );
-
-        sendLoginAlertEmail(user, rawDevice, clientIp);
-      }
-
-      await logActivity(
-        user._id,
-        "New Login Detected",
-        rawDevice,
-        "Warning"
-      );
-    } else {
-      await logActivity(
-        user._id,
-        "Login Successful",
-        rawDevice,
-        "Success"
-      );
-    }
+    const token = generateToken(user._id, user.role);
 
     return res.status(200).json({
       message: "Login successful",
@@ -144,86 +73,89 @@ export const loginUser = async (req, res) => {
     });
   } catch (error) {
     console.error("LOGIN ERROR:", error);
-
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+//     Get logged-in user profile
 
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-
     if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
+      return res.status(404).json({ message: "User not found" });
     }
-
     return res.status(200).json({ user });
   } catch (error) {
     console.error("GET ME ERROR:", error);
-
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
-// @desc Verify reset token and update user password
-// @route POST /api/auth/reset-password
-export const resetPassword = async (req, res) => {
+export const forgotPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { email } = req.body;
 
-    if (!token || !newPassword) {
-      return res.status(400).json({
-        message: "Token and new password are required.",
-      });
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
 
-    let decoded;
+    const user = await User.findOne({ email });
 
-    try {
-      decoded = verifyResetToken(token);
-    } catch (err) {
-      return res.status(400).json({
-        message: "Reset token is invalid or has expired.",
-      });
+    if (user) {
+     
+      console.log(`[TODO] Send OTP to ${user.email} - waiting on Dev 5's otpService`);
     }
-
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found.",
-      });
-    }
-
-    // Set new password
-    user.password = newPassword;
-    await user.save();
-
-    // Log activity
-    await logActivity(
-      user._id,
-      "Password Reset",
-      "System",
-      "Success"
-    );
 
     return res.status(200).json({
-      message: "Password updated successfully. You can now login.",
+      message: "If an account exists with this email, a reset code has been sent.",
     });
   } catch (error) {
-    console.error("RESET PASSWORD ERROR:", error);
+    console.error("FORGOT PASSWORD ERROR:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({ message: "New password is required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    }
+
+    let user;
+
+    if (token) {
+      // Token-based password reset (from the settings page link)
+      const { verifyResetToken } = await import("../config/jwt.js");
+      try {
+        const decoded = verifyResetToken(token);
+        user = await User.findById(decoded.id);
+      } catch (err) {
+        return res.status(400).json({ message: "Reset token is invalid or has expired." });
+      }
+    } else if (email) {
+      // OTP-based/email password reset
+      user = await User.findOne({ email });
+    } else {
+      return res.status(400).json({ message: "Either email or token is required" });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    user.password = newPassword;
+    await user.save({ validateModifiedOnly: true });
+
+    return res.status(200).json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };

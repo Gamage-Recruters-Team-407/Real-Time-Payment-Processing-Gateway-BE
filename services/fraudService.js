@@ -3,6 +3,7 @@ import Investigation from '../models/Investigation.js';
 import { evaluateRules } from './ruleEngine.js';
 import { calculateRisk } from './riskScore.js';
 import { mlClient } from './mlClient.js';
+import { runCypher } from './neo4j.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
@@ -40,6 +41,30 @@ export const fraudService = {
     });
 
     await fraudLog.save();
+
+    // Save relationships to Neo4j for Entity Link Analysis
+    try {
+      const cypher = `
+        MERGE (u:Account {id: $userId})
+        MERGE (ip:Ip {id: $ip})
+        MERGE (d:Device {id: $deviceId})
+        MERGE (m:Merchant {id: $merchant})
+        MERGE (t:Transaction {id: $transactionId})
+        MERGE (u)-[:USES_IP]->(ip)
+        MERGE (u)-[:USES_DEVICE]->(d)
+        MERGE (u)-[:PAYMENT_TO]->(m)
+        MERGE (u)-[:PERFORMED]->(t)
+      `;
+      await runCypher(cypher, {
+        userId: transactionData.userId || 'Unknown',
+        transactionId: transactionData.transactionId || 'Unknown',
+        ip: transactionData.ip || 'Unknown',
+        deviceId: transactionData.deviceId || 'Unknown',
+        merchant: transactionData.merchant || 'Unknown'
+      });
+    } catch (e) {
+      console.error('Failed to save to Neo4j:', e.message);
+    }
 
     return {
       finalScore,

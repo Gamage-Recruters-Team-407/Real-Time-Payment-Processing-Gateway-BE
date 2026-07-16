@@ -97,6 +97,18 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: "Standard access",
     },
+    loginAlertsEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    rememberDeviceEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    recoveryEmail: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

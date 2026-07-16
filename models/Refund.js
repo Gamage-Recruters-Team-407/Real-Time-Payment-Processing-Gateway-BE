@@ -2,6 +2,15 @@ import mongoose from "mongoose";
 
 const refundSchema = new mongoose.Schema(
   {
+ 
+    // Human readable ID
+    refundId: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+
+    
     name: {
       type: String,
       required: [true, "Name is required"],
@@ -38,6 +47,16 @@ const refundSchema = new mongoose.Schema(
       enum: ["PENDING", "APPROVED", "REJECTED"],
       default: "PENDING",
     },
+
+    approvedDate: {
+        type: Date,
+    },
+
+    refundedDate: {
+  type: Date,
+},
+
+
   },
   {
     timestamps: true,

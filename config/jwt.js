@@ -26,14 +26,14 @@
 
 import jwt from "jsonwebtoken";
 
-export const generateToken = (userId, role) => {
+export const generateToken = (userId, role, customExpiry) => {
   console.log("JWT_SECRET:", process.env.JWT_SECRET);
 
   return jwt.sign(
     { id: userId, role },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.JWT_EXPIRY || "1d",
+      expiresIn: customExpiry || process.env.JWT_EXPIRY || "1d",
     }
   );
 };

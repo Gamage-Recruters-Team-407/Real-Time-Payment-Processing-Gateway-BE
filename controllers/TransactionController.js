@@ -449,3 +449,32 @@ export const exportTransactions = async (req, res) => {
     return res.status(500).json({ message: "Failed to export transactions" });
   }
 };
+
+export const getTransactionSummary = async (req, res) => {
+  try {
+    const [all, successful, failed, flagged] = await Promise.all([
+      Transaction.find({}).select("amount").lean(),
+      Transaction.countDocuments({ status: "Successful" }),
+      Transaction.countDocuments({ status: "Failed" }),
+      Transaction.countDocuments({ status: "Flagged" }),
+    ]);
+
+    const totalVolume = all.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const totalCount = all.length;
+    const successRatePct =
+      totalCount > 0 ? ((successful / totalCount) * 100).toFixed(1) : "0.0";
+
+    return res.json({
+      totalVolume,
+      successfulCount: successful,
+      failedCount: failed,
+      flaggedCount: flagged,
+      successRatePct: parseFloat(successRatePct),
+      totalVolumeChangePct: 12.5, // placeholder; add real calculation when you have historical data
+    });
+  } catch (error) {
+    console.error("Failed to fetch summary:", error);
+    return res.status(500).json({ message: "Failed to fetch transaction summary" });
+  }
+};
+

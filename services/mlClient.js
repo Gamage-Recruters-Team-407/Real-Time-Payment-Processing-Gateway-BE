@@ -16,13 +16,10 @@ export const mlClient = {
         type_TRANSFER: transactionData.type === 'TRANSFER' ? 1 : 0
       };
 
-      console.log('📤 Sending transaction to ML service...');
       const response = await axios.post('http://127.0.0.1:5005/predict', payload, {
         timeout: 2000 // 2 seconds timeout
       });
 
-      console.log(`📥 ML Response:`, response.data);
-      
       // Demo Override: ensure our 50k transaction gets flagged by ML 
       if (transactionData.amount === 50000) {
         return {

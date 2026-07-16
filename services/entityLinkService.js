@@ -11,9 +11,12 @@ export const entityLinkService = {
     try {
       const records = await runCypher(query, { id });
       
-      // If neo4j is empty (e.g. no ingestion pipeline running yet), return mock data for frontend demo
       if (!records || records.length === 0) {
-        return getMockEntityData(id);
+        return {
+          nodes: [],
+          edges: [],
+          summary: { totalNodes: 0, totalEdges: 0, fraudRing: false, riskLevel: "LOW", clusterSize: 0 }
+        };
       }
       
       const nodesMap = new Map();
@@ -50,35 +53,13 @@ export const entityLinkService = {
          }
       };
     } catch (e) {
-      console.error("Neo4j graph error, falling back to mock data:", e.message);
-      return getMockEntityData(id);
+      console.error("Neo4j graph error:", e.message);
+      return {
+         nodes: [],
+         edges: [],
+         summary: { totalNodes: 0, totalEdges: 0, fraudRing: false, riskLevel: "LOW", clusterSize: 0 }
+      };
     }
   }
 };
-
-const getMockEntityData = (id) => {
-  return {
-    nodes: [
-        { id: id, type: "account", label: "Account A", risk: 94 },
-        { id: "GP-5512-XXXX", type: "account", label: "Account B", risk: 100 },
-        { id: "192.168.1.45", type: "ip", label: "IP Address", risk: 0 },
-        { id: "DEV-4421", type: "device", label: "Device", risk: 0 },
-        { id: "UNK_TECH_HKG", type: "merchant", label: "Merchant", risk: 95 }
-    ],
-    edges: [
-        { from: id, to: "192.168.1.45", type: "USES_IP" },
-        { from: "GP-5512-XXXX", to: "192.168.1.45", type: "USES_IP" },
-        { from: id, to: "DEV-4421", type: "USES_DEVICE" },
-        { from: "GP-5512-XXXX", to: "DEV-4421", type: "USES_DEVICE" },
-        { from: id, to: "UNK_TECH_HKG", type: "PAYMENT_TO" },
-        { from: "GP-5512-XXXX", to: "UNK_TECH_HKG", type: "PAYMENT_TO" }
-    ],
-    summary: {
-        totalNodes: 5,
-        totalEdges: 6,
-        fraudRing: true,
-        riskLevel: "HIGH",
-        clusterSize: 2
-    }
-  };
-};
+

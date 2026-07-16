@@ -1,12 +1,11 @@
-// userController.js
-// Handles: User Dashboard summary + User Profile (view/update)
-// Owner: Developer 2 (User Dashboard & Profile)
-
+import * as userService from '../services/userService.js';
+import { validationResult } from 'express-validator';
 import {
   findUserById,
   getDashboardStats,
   updateUserProfile,
 } from "../services/userService.js";
+
 
 // -----------------------------------------------------------------------
 // GET /api/users/me
@@ -19,9 +18,9 @@ export const getDashboard = async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-
+ 
     const stats = await getDashboardStats(user._id);
-
+ 
     return res.json({
       id: user._id,
       name: user.name,
@@ -35,7 +34,7 @@ export const getDashboard = async (req, res) => {
     return res.status(500).json({ message: "Server error loading dashboard" });
   }
 };
-
+ 
 // -----------------------------------------------------------------------
 // GET /api/users/profile
 // Returns full profile of the logged-in user.
@@ -53,7 +52,7 @@ export const getProfile = async (req, res) => {
     return res.status(500).json({ message: "Server error loading profile" });
   }
 };
-
+ 
 // -----------------------------------------------------------------------
 // PUT /api/users/profile
 // Updates editable profile fields (name, phone). Email is the unique
@@ -64,19 +63,19 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const { name, phone } = req.body;
-
+ 
     if ((!name || !name.trim()) && phone === undefined) {
       return res.status(400).json({ message: "Nothing to update" });
     }
     if (name !== undefined && !name.trim()) {
       return res.status(400).json({ message: "Name cannot be empty" });
     }
-
+ 
     const updatedUser = await updateUserProfile(req.user.id, { name, phone });
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
     }
-
+ 
     return res.json({
       message: "Profile updated successfully",
       user: {
@@ -92,4 +91,61 @@ export const updateProfile = async (req, res) => {
     console.error("updateProfile error:", err.message);
     return res.status(500).json({ message: "Server error updating profile" });
   }
+};
+
+export const createUser = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  try {
+    const user = await userService.createUser(req.body);
+    return res.status(201).json({ success: true, data: user });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+export const listUsers = async (req, res) => {
+  try {
+    const { page, limit, search, role } = req.query;
+    const result = await userService.getUsers({ page, limit, search, role });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getUser = async (req, res) => {
+  try {
+    const user = await userService.getUserById(req.params.id);
+    return res.json({ success: true, data: user });
+  } catch (err) {
+    return res.status(404).json({ success: false, message: err.message });
+  }
+};
+
+export const updateUser = async (req, res) => {
+  try {
+    const user = await userService.updateUser(req.params.id, req.body);
+    return res.json({ success: true, data: user });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+export const removeUser = async (req, res) => {
+  try {
+    await userService.deleteUser(req.params.id);
+    return res.json({ success: true, message: 'User deleted' });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+export default {
+  createUser,
+  listUsers,
+  getUser,
+  updateUser,
+  removeUser,
 };

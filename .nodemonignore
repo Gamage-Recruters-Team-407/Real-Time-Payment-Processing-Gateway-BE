@@ -1,0 +1,9 @@
+node_modules/
+.git/
+package-lock.json
+package.json
+docker-compose.yml
+python-microservices/
+**/*.pyc
+**/*.log
+.env*

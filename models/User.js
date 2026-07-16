@@ -38,10 +38,9 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["Admin", "User"],
+      enum: ["Admin", "User", "admin", "user"],
       default: "User",
     },
-
     accessLabel: {
       type: String,
       trim: true,

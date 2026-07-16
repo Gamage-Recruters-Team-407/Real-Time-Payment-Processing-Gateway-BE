@@ -33,7 +33,6 @@ const transactionSchema = new mongoose.Schema(
     transactionId: {
       type: String,
       required: [true, "Transaction ID is required"],
-      unique: true,
       trim: true,
     },
     merchantName: {

@@ -227,6 +227,17 @@ const attachRefundSummary = async (transactions) => {
     const relatedRefunds =
       refundsByTransactionId.get(transaction.transactionId) || [];
 
+    // Calculate days elapsed since transaction creation
+    const createdTime = new Date(transaction.createdAt).getTime();
+    const currentTime = new Date().getTime();
+    const diffDays = (currentTime - createdTime) / (1000 * 60 * 60 * 24);
+    const hasRefundRequest = relatedRefunds.length > 0;
+    const isSuccessful =
+      transaction.status === "Successful" || transaction.status === "Completed";
+    
+      // 7-day rule check
+    const isRefundable = isSuccessful && !hasRefundRequest && diffDays <= 7;
+
     return {
       ...transaction,
       refundSummary: {

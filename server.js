@@ -18,6 +18,7 @@ import userPaymentHistoryRoutes from "./routes/userPaymentHistoryRoutes.js";
 dotenv.config({ path: "./.env" });
 
 const app = express();
+app.set("trust proxy", true);
 
 app.use(helmet());
 app.use(cors());
@@ -27,6 +28,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
+  validate: { trustProxy: false },
 });
 app.use(limiter);
 

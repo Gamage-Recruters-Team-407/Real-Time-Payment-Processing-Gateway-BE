@@ -118,23 +118,38 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { email, newPassword } = req.body;
+    const { email, token, newPassword } = req.body;
 
-    if (!email || !newPassword) {
-      return res.status(400).json({ message: "Email and new password are required" });
+    if (!newPassword) {
+      return res.status(400).json({ message: "New password is required" });
     }
 
     if (newPassword.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
 
-    const user = await User.findOne({ email });
+    let user;
+
+    if (token) {
+      // Token-based password reset (from the settings page link)
+      const { verifyResetToken } = await import("../config/jwt.js");
+      try {
+        const decoded = verifyResetToken(token);
+        user = await User.findById(decoded.id);
+      } catch (err) {
+        return res.status(400).json({ message: "Reset token is invalid or has expired." });
+      }
+    } else if (email) {
+      // OTP-based/email password reset
+      user = await User.findOne({ email });
+    } else {
+      return res.status(400).json({ message: "Either email or token is required" });
+    }
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // user.password = newPassword;
-    // await user.save();
     user.password = newPassword;
     await user.save({ validateModifiedOnly: true });
 

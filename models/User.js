@@ -41,7 +41,6 @@ const userSchema = new mongoose.Schema(
       enum: ["Admin", "User"],
       default: "User",
     },
-
     accessLabel: {
       type: String,
       trim: true,

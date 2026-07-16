@@ -11,16 +11,16 @@ router.get('/', authMiddleware, adminMiddleware, userController.listUsers);
 
 // Create user
 router.post(
-	'/',
-	authMiddleware,
-	adminMiddleware,
-	[
-		body('name').isString().isLength({ min: 1 }),
-		body('email').isEmail(),
-		body('role').optional().isString(),
-		body('password').optional().isLength({ min: 6 }),
-	],
-	userController.createUser
+  '/',
+  authMiddleware,
+  adminMiddleware,
+  [
+    body('name').isString().isLength({ min: 1 }),
+    body('email').isEmail(),
+    body('role').optional().isString(),
+    body('password').optional().isLength({ min: 6 }),
+  ],
+  userController.createUser
 );
 
 // Get single user

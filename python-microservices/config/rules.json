@@ -1,0 +1,18 @@
+{
+    "rules": {
+        "velocity": {"enabled": true, "threshold": 5, "points": 25},
+        "amount": {"enabled": true, "threshold": 5000, "points": 20},
+        "geographic": {"enabled": true, "points": 20},
+        "device": {"enabled": true, "points": 20},
+        "merchant": {"enabled": true, "risk_threshold": 80, "points": 15},
+        "user_history": {"enabled": true, "history_threshold": 10, "points": 15},
+        "time": {"enabled": true, "start_hour": 0, "end_hour": 5, "points": 10},
+        "blacklist": {"enabled": true, "points": 30}
+    },
+    "decision_thresholds": {
+        "block_threshold": 80,
+        "ml_threshold_low": 20,
+        "ml_threshold_high": 80,
+        "final_threshold": 0.55
+    }
+}

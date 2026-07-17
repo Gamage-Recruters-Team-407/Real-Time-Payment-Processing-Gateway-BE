@@ -1,11 +1,18 @@
 import { randomUUID } from "crypto";
-import Payment from "../models/Payment.js";
 import mongoose from "mongoose";
+import {
+  processCardPayment,
+  createPendingPayment,
+  findPaymentById,
+  findPaymentByObjectId,
+  findAllPayments,
+  updatePaymentStatusInService
+} from "../services/paymentService.js";
 
 const PRIMARY_DESTINATION_ACCOUNT = "PRIMARY_BANK_ACCOUNT";
 
 const ALLOWED_STATUS_TRANSITIONS = {
-  PENDING: ["PROCESSING", "CANCELLED"],
+  PENDING: ["PROCESSING", "COMPLETED", "FAILED", "CANCELLED"],
   PROCESSING: ["COMPLETED", "FAILED"],
   COMPLETED: [],
   FAILED: [],
@@ -26,6 +33,7 @@ export const createPayment = async (req, res) => {
       currency = "LKR",
       description = "",
       paymentMethod = "CARD",
+      cardDetails,
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -59,27 +67,46 @@ export const createPayment = async (req, res) => {
       });
     }
 
-    const payment = await Payment.create({
-      paymentId: generatePaymentId(),
+    let payment;
 
-      userId: req.user?._id ?? null,
+    if (cardDetails) {
+      const paymentId = generatePaymentId();
+      const result = await processCardPayment({
+        userId: req.user?._id || req.user?.id || null,
+        amount: numericAmount,
+        paymentId,
+        cardDetails: {
+          cardholderName: cardDetails.cardholderName,
+          cardNumber: cardDetails.cardNumber,
+          expiry: cardDetails.expiry || "12/29",
+          cvc: cardDetails.cvc || "123"
+        }
+      });
 
-      amount: Number(numericAmount.toFixed(2)),
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message || "Payment processing failed",
+          errors: result.errors
+        });
+      }
 
-      currency: normalizedCurrency,
-
-      description: String(description).trim(),
-
-      paymentMethod: normalizedPaymentMethod,
-
-      status: "PENDING",
-
-      destinationAccountKey: PRIMARY_DESTINATION_ACCOUNT,
-    });
+      payment = result.payment;
+    } else {
+      payment = await createPendingPayment({
+        paymentId: generatePaymentId(),
+        userId: req.user?._id || req.user?.id || null,
+        amount: Number(numericAmount.toFixed(2)),
+        currency: normalizedCurrency,
+        description: String(description).trim(),
+        paymentMethod: normalizedPaymentMethod,
+        destinationAccountKey: PRIMARY_DESTINATION_ACCOUNT,
+      });
+    }
 
     return res.status(201).json({
       success: true,
-      message: "Payment initiated successfully",
+      message: cardDetails ? "Payment processed successfully" : "Payment initiated successfully",
       data: payment,
     });
   } catch (error) {
@@ -108,13 +135,10 @@ export const createPayment = async (req, res) => {
   }
 };
 
-
 // Get a payment by payment ID
 export const getPaymentById = async (req, res) => {
   try {
-    const payment = await Payment.findOne({
-      paymentId: req.params.paymentId,
-    });
+    const payment = await findPaymentById(req.params.paymentId);
 
     if (!payment) {
       return res.status(404).json({
@@ -137,11 +161,10 @@ export const getPaymentById = async (req, res) => {
   }
 };
 
-
 // Update payment status
 export const updatePaymentStatus = async (req, res) => {
   try {
-    const { status, transactionId } = req.body;
+    const { status, transactionId, cardLastFourDigits } = req.body;
 
     if (!status) {
       return res.status(400).json({
@@ -163,9 +186,7 @@ export const updatePaymentStatus = async (req, res) => {
       });
     }
 
-    const payment = await Payment.findOne({
-      paymentId: req.params.paymentId,
-    });
+    const payment = await findPaymentById(req.params.paymentId);
 
     if (!payment) {
       return res.status(404).json({
@@ -196,18 +217,16 @@ export const updatePaymentStatus = async (req, res) => {
       });
     }
 
-    payment.status = normalizedStatus;
-
-    if (transactionId) {
-      payment.transactionId = String(transactionId).trim();
-    }
-
-    await payment.save();
+    const updatedPayment = await updatePaymentStatusInService(req.params.paymentId, {
+      status: normalizedStatus,
+      transactionId: transactionId ? String(transactionId).trim() : undefined,
+      cardLastFourDigits: cardLastFourDigits ? String(cardLastFourDigits).trim() : undefined
+    });
 
     return res.status(200).json({
       success: true,
       message: `Payment status updated from ${currentStatus} to ${normalizedStatus}`,
-      data: payment,
+      data: updatedPayment,
     });
   } catch (error) {
     if (error.name === "ValidationError") {
@@ -231,8 +250,7 @@ export const updatePaymentStatus = async (req, res) => {
 // Get all payments for admin
 export const getAllPayments = async (req, res) => {
   try {
-    const payments = await Payment.find()
-      .sort({ createdAt: -1 });
+    const payments = await findAllPayments();
 
     return res.status(200).json({
       success: true,
@@ -263,7 +281,7 @@ export const getPaymentByObjectId = async (req, res) => {
       });
     }
 
-    const payment = await Payment.findById(id);
+    const payment = await findPaymentByObjectId(id);
 
     if (!payment) {
       return res.status(404).json({

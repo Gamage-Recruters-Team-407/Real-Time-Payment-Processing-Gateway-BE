@@ -45,12 +45,12 @@ export const getPaymentHistory = async (req, res) => {
     const limit = Math.max(parseInt(req.query.limit, 10) || 5, 1);
     
     const query = {};
-    if (req.user?._id) {
-      query.userId = req.user._id;
-    }
-    // if (req.user?.id) {
-      // query.userId = req.user.id;
+    // if (req.user?._id) {
+      // query.userId = req.user._id;
     // }
+    if (req.user?.id) {
+      query.userId = req.user.id;
+    }
 
     const search = (req.query.search || "").trim();
     if (search) {
@@ -70,11 +70,15 @@ export const getPaymentHistory = async (req, res) => {
       }
     }
 
-    const month = req.query.month ? parseInt(req.query.month, 10) : null;
-    if (month) {
+    // month param format: "YYYY-MM" (e.g. "2026-07")
+    const monthParam = (req.query.month || "").trim();
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [year, mon] = monthParam.split("-").map(Number);
       query.$expr = {
-        ...(query.$expr || {}),
-        $eq: [{ $month: "$createdAt" }, month],
+        $and: [
+          { $eq: [{ $year: "$createdAt" }, year] },
+          { $eq: [{ $month: "$createdAt" }, mon] }
+        ]
       };
     }
 
@@ -122,12 +126,12 @@ export const getPaymentHistory = async (req, res) => {
 export const getPaymentSummary = async (req, res) => {
   try {
     const query = {};
-    if (req.user?._id) {
-      query.userId = req.user._id;
-    }
-    // if (req.user?.id) {
-      // query.userId = req.user.id;
+    // if (req.user?._id) {
+      // query.userId = req.user._id;
     // }
+    if (req.user?.id) {
+      query.userId = req.user.id;
+    }
 
     const [all, successful, failed, pending] = await Promise.all([
       Payment.find(query).select("amount status").lean(),

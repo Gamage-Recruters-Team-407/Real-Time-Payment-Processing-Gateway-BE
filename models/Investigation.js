@@ -16,7 +16,7 @@ const investigationSchema = new mongoose.Schema({
   transactionId: { type: String, required: true },
   status: { 
     type: String, 
-    enum: ['CREATE', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED', 'CLOSED'], 
+    enum: ['CREATE', 'UNDER_REVIEW', 'RESOLVED', 'CLOSED'], 
     default: 'CREATE' 
   },
   priority: { 
@@ -25,8 +25,6 @@ const investigationSchema = new mongoose.Schema({
     default: 'MEDIUM' 
   },
   assignedTo: { type: String },
-  escalatedBy: { type: String },
-  escalationReason: { type: String },
   notes: [noteSchema],
   timeline: [timelineEventSchema],
   decision: { type: String, enum: ['BLOCK', 'CLEAR', 'MONITOR', 'PENDING'], default: 'PENDING' }

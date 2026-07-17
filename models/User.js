@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema(
     },
     loginAlertsEnabled: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     rememberDeviceEnabled: {
       type: Boolean,

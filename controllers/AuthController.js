@@ -1,5 +1,7 @@
 import User from "../models/User.js";
 import { generateToken } from "../config/jwt.js";
+import { logActivity } from "../services/settingsService.js";
+
 
 //    Register new user
 
@@ -18,8 +20,8 @@ export const registerUser = async (req, res) => {
 
     const role =
       adminSecret && adminSecret === process.env.ADMIN_SECRET_KEY
-        ? "Admin"
-        : "User";
+        ? "admin"
+        : "user";
 
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user._id, user.role);
@@ -54,12 +56,55 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    // Extract client IP address supporting proxy headers
+    const clientIp = 
+      req.headers["x-forwarded-for"]?.split(',')[0].trim() || 
+      req.ip || 
+      req.socket.remoteAddress || 
+      "127.0.0.1";
+
+    // [RESTORED] Device Detection from User Agent header
+    const userAgent = req.headers["user-agent"] || "Unknown Device";
+    const rawDevice = userAgent.includes("Chrome")
+      ? "Chrome"
+      : userAgent.includes("Firefox")
+      ? "Firefox"
+      : userAgent.includes("Safari")
+      ? "Safari"
+      : "System";
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      // Log incorrect password attempt
+      await logActivity(user._id, "Failed Login Attempt", rawDevice, "Warning", clientIp);
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = generateToken(user._id, user.role);
+    // [RESTORED] Remember Device check: set token expiry to 30 days if enabled
+    const token = generateToken(
+      user._id,
+      user.role,
+      user.rememberDeviceEnabled ? "30d" : undefined
+    );
+
+    // Check if this device logged in previously for this user with this IP
+    const LoginActivity = (await import("../models/LoginActivity.js")).default;
+    const knownDevice = await LoginActivity.findOne({
+      userId: user._id,
+      device: rawDevice,
+      ip: clientIp,
+    });
+
+    if (!knownDevice) {
+      // New device login alerts check
+      if (user.loginAlertsEnabled) {
+        const { sendLoginAlertEmail } = await import("../services/settingsService.js");
+        sendLoginAlertEmail(user, rawDevice, clientIp);
+      }
+      await logActivity(user._id, "New Login Detected", rawDevice, "Warning", clientIp);
+    } else {
+      await logActivity(user._id, "Login Successful", rawDevice, "Success", clientIp);
+    }
 
     return res.status(200).json({
       message: "Login successful",
@@ -69,6 +114,8 @@ export const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        loginAlertsEnabled: user.loginAlertsEnabled,
+        rememberDeviceEnabled: user.rememberDeviceEnabled
       },
     });
   } catch (error) {
@@ -112,50 +159,6 @@ export const forgotPassword = async (req, res) => {
     });
   } catch (error) {
     console.error("FORGOT PASSWORD ERROR:", error);
-    return res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-export const resetPassword = async (req, res) => {
-  try {
-    const { email, token, newPassword } = req.body;
-
-    if (!newPassword) {
-      return res.status(400).json({ message: "New password is required" });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
-    }
-
-    let user;
-
-    if (token) {
-      // Token-based password reset (from the settings page link)
-      const { verifyResetToken } = await import("../config/jwt.js");
-      try {
-        const decoded = verifyResetToken(token);
-        user = await User.findById(decoded.id);
-      } catch (err) {
-        return res.status(400).json({ message: "Reset token is invalid or has expired." });
-      }
-    } else if (email) {
-      // OTP-based/email password reset
-      user = await User.findOne({ email });
-    } else {
-      return res.status(400).json({ message: "Either email or token is required" });
-    }
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    user.password = newPassword;
-    await user.save({ validateModifiedOnly: true });
-
-    return res.status(200).json({ message: "Password reset successful" });
-  } catch (error) {
-    console.error("RESET PASSWORD ERROR:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };

@@ -45,12 +45,12 @@ export const getPaymentHistory = async (req, res) => {
     const limit = Math.max(parseInt(req.query.limit, 10) || 5, 1);
     
     const query = {};
-    if (req.user?._id) {
-      query.userId = req.user._id;
-    }
-    // if (req.user?.id) {
-      // query.userId = req.user.id;
+    // if (req.user?._id) {
+      // query.userId = req.user._id;
     // }
+    if (req.user?.id) {
+      query.userId = req.user.id;
+    }
 
     const search = (req.query.search || "").trim();
     if (search) {
@@ -126,12 +126,12 @@ export const getPaymentHistory = async (req, res) => {
 export const getPaymentSummary = async (req, res) => {
   try {
     const query = {};
-    if (req.user?._id) {
-      query.userId = req.user._id;
-    }
-    // if (req.user?.id) {
-      // query.userId = req.user.id;
+    // if (req.user?._id) {
+      // query.userId = req.user._id;
     // }
+    if (req.user?.id) {
+      query.userId = req.user.id;
+    }
 
     const [all, successful, failed, pending] = await Promise.all([
       Payment.find(query).select("amount status").lean(),

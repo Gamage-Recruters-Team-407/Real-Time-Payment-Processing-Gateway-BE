@@ -48,6 +48,9 @@ export const getPaymentHistory = async (req, res) => {
     if (req.user?._id) {
       query.userId = req.user._id;
     }
+    // if (req.user?.id) {
+      // query.userId = req.user.id;
+    // }
 
     const search = (req.query.search || "").trim();
     if (search) {
@@ -66,6 +69,15 @@ export const getPaymentHistory = async (req, res) => {
         query.status = status.toUpperCase();
       }
     }
+
+    const month = req.query.month ? parseInt(req.query.month, 10) : null;
+    if (month) {
+      query.$expr = {
+        ...(query.$expr || {}),
+        $eq: [{ $month: "$createdAt" }, month],
+      };
+    }
+
 
     const [payments, total] = await Promise.all([
       Payment.find(query)
@@ -86,7 +98,7 @@ export const getPaymentHistory = async (req, res) => {
       method: p.paymentMethod + (p.cardLastFourDigits ? ` •••• ${p.cardLastFourDigits}` : ""),
       amount: p.amount,
       currency: p.currency,
-      status: p.status === "COMPLETED" ? "Successful" : p.status.charAt(0) + p.status.slice(1).toLowerCase(),
+      status: p.status.charAt(0) + p.status.slice(1).toLowerCase(),
       refundSummary: p.refundSummary,
     }));
 
@@ -113,13 +125,17 @@ export const getPaymentSummary = async (req, res) => {
     if (req.user?._id) {
       query.userId = req.user._id;
     }
+    // if (req.user?.id) {
+      // query.userId = req.user.id;
+    // }
 
-    const [all, successful, failed, flagged] = await Promise.all([
+    const [all, successful, failed, pending] = await Promise.all([
       Payment.find(query).select("amount status").lean(),
       Payment.countDocuments({ ...query, status: "COMPLETED" }),
       Payment.countDocuments({ ...query, status: "FAILED" }),
-      Payment.countDocuments({ ...query, status: "PROCESSING" }),
+      Payment.countDocuments({ ...query, status: "PENDING" }),
     ]);
+
 
     const totalVolume = all
       .filter((p) => p.status === "COMPLETED")
@@ -129,17 +145,19 @@ export const getPaymentSummary = async (req, res) => {
     const successRatePct =
       totalCount > 0 ? ((successful / totalCount) * 100).toFixed(1) : "0.0";
 
+
     return res.json({
       success: true,
       data: {
         totalVolume,
         successfulCount: successful,
         failedCount: failed,
-        flaggedCount: flagged,
+        pendingCount: pending,
         successRatePct: parseFloat(successRatePct),
         totalVolumeChangePct: 0.0,
       }
     });
+
   } catch (error) {
     console.error("Fetch payment summary error:", error);
     return res.status(500).json({ success: false, message: "Unable to retrieve payment summary" });

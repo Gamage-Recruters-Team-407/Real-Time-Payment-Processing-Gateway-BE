@@ -73,8 +73,11 @@ export const createPayment = async (req, res) => {
       const paymentId = generatePaymentId();
       const result = await processCardPayment({
         userId: req.user?._id || req.user?.id || null,
+        customerEmail: req.user?.email || "",
+        customerName: cardDetails.cardholderName || "",
         amount: numericAmount,
         paymentId,
+        description: String(description).trim(),
         cardDetails: {
           cardholderName: cardDetails.cardholderName,
           cardNumber: cardDetails.cardNumber,
@@ -96,10 +99,12 @@ export const createPayment = async (req, res) => {
       payment = await createPendingPayment({
         paymentId: generatePaymentId(),
         userId: req.user?._id || req.user?.id || null,
+        customerEmail: req.user?.email || "",
         amount: Number(numericAmount.toFixed(2)),
         currency: normalizedCurrency,
         description: String(description).trim(),
         paymentMethod: normalizedPaymentMethod,
+        customerName: req.user?.email || "Payment Customer",
         destinationAccountKey: PRIMARY_DESTINATION_ACCOUNT,
       });
     }

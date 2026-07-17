@@ -70,11 +70,15 @@ export const getPaymentHistory = async (req, res) => {
       }
     }
 
-    const month = req.query.month ? parseInt(req.query.month, 10) : null;
-    if (month) {
+    // month param format: "YYYY-MM" (e.g. "2026-07")
+    const monthParam = (req.query.month || "").trim();
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [year, mon] = monthParam.split("-").map(Number);
       query.$expr = {
-        ...(query.$expr || {}),
-        $eq: [{ $month: "$createdAt" }, month],
+        $and: [
+          { $eq: [{ $year: "$createdAt" }, year] },
+          { $eq: [{ $month: "$createdAt" }, mon] }
+        ]
       };
     }
 

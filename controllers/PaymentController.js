@@ -26,6 +26,7 @@ export const createPayment = async (req, res) => {
       currency = "LKR",
       description = "",
       paymentMethod = "CARD",
+      cardDetails,
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -59,6 +60,31 @@ export const createPayment = async (req, res) => {
       });
     }
 
+    let status = "PENDING";
+    let cardLastFourDigits = null;
+    let transactionId = null;
+
+    if (cardDetails) {
+      if (!cardDetails.cardNumber || !cardDetails.cardholderName) {
+        return res.status(400).json({
+          success: false,
+          message: "Cardholder name and card number are required",
+        });
+      }
+
+      const cleanCard = String(cardDetails.cardNumber).replace(/\s+/g, "");
+      if (cleanCard.length < 13 || cleanCard.length > 19) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid card number length",
+        });
+      }
+
+      cardLastFourDigits = cleanCard.slice(-4);
+      status = "COMPLETED";
+      transactionId = `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
+    }
+
     const payment = await Payment.create({
       paymentId: generatePaymentId(),
 
@@ -72,14 +98,18 @@ export const createPayment = async (req, res) => {
 
       paymentMethod: normalizedPaymentMethod,
 
-      status: "PENDING",
+      status,
+
+      cardLastFourDigits,
+
+      transactionId,
 
       destinationAccountKey: PRIMARY_DESTINATION_ACCOUNT,
     });
 
     return res.status(201).json({
       success: true,
-      message: "Payment initiated successfully",
+      message: cardDetails ? "Payment processed successfully" : "Payment initiated successfully",
       data: payment,
     });
   } catch (error) {

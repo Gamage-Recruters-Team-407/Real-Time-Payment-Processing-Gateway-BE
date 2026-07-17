@@ -1,5 +1,4 @@
 flask
-confluent-kafka
 scikit-learn
 pandas
 joblib

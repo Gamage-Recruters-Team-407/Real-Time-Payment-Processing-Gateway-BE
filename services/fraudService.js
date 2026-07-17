@@ -1,27 +1,40 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
-import { evaluateRules } from './ruleEngine.js';
-import { calculateRisk } from './riskScore.js';
 import { mlClient } from './mlClient.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
   processTransaction: async (transactionData) => {
-    // 1 & 2. Run rules
-    const { ruleScore, reasons } = await evaluateRules(transactionData);
-    
-    // Day 4: Call ML Model
+    // Call the unified Python ML & Rule Engine service
+    let finalScore = 0;
+    let ruleScore = 0;
     let mlScore = null;
+    let status = 'REVIEW';
+    let reasons = [];
+    
     const mlResponse = await mlClient.predictFraud(transactionData);
-    if (mlResponse && mlResponse.probability > 0.5) {
-      mlScore = mlResponse.risk_score;
-      reasons.push(`AI Model identified suspicious pattern (${mlScore}% risk)`);
-    } else if (mlResponse) {
-      mlScore = mlResponse.risk_score;
+    
+    if (mlResponse) {
+      // The Python Microservice successfully returned a verdict
+      ruleScore = mlResponse.rule_score;
+      mlScore = mlResponse.probability * 100;
+      finalScore = mlResponse.risk_score;
+      reasons = mlResponse.reasons || [];
+      
+      // Map status strictly to the risk score as requested
+      // The user wants ANY detection of fraud (medium or high) to automatically BLOCK the transaction
+      if (finalScore >= 40 || mlResponse.verdict === 'BLOCK') {
+        status = 'BLOCKED';
+      } else {
+        status = 'LOW_RISK';
+      }
+    } else {
+      // Fallback if Python service is offline
+      status = 'MEDIUM_RISK';
+      finalScore = 50; 
+      ruleScore = 50;
+      reasons = ['Fallback: Python Microservice is unreachable'];
     }
-
-    // 3 - 6. Calculate Risk Score and Status
-    const { finalScore, status } = calculateRisk(ruleScore, mlScore);
 
     // Save to MongoDB
     const fraudLog = new FraudLog({
@@ -53,13 +66,13 @@ export const fraudService = {
   // Task 2.2: Dashboard Metrics API
   getDashboardMetrics: async () => {
     const blockedAttempts = await FraudLog.countDocuments({ status: 'BLOCKED' });
-    const suspiciousPatterns = await FraudLog.countDocuments({ status: 'HIGH_RISK' });
+    const suspiciousPatterns = await FraudLog.countDocuments({});
     
     // Distinct users with riskScore > 80
     const highRiskEntities = (await FraudLog.distinct('userId', { riskScore: { $gt: 80 } })).length;
     
-    // Using Investigation model for cases
-    const openCases = await Investigation.countDocuments({ status: { $in: ['CREATE', 'UNDER_REVIEW'] } });
+    // Count all transactions that have not yet been resolved (still need Review or Investigate)
+    const openCases = await FraudLog.countDocuments({ status: { $in: ['LOW_RISK', 'MEDIUM_RISK', 'HIGH_RISK', 'REVIEW', 'UNDER_REVIEW'] } });
     const escalated = await Investigation.countDocuments({ status: 'ESCALATED' });
 
     return {
@@ -81,7 +94,8 @@ export const fraudService = {
     if (search) {
       filter.$or = [
         { transactionId: { $regex: search, $options: 'i' } },
-        { merchant: { $regex: search, $options: 'i' } }
+        { merchant: { $regex: search, $options: 'i' } },
+        { userId: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -109,7 +123,7 @@ export const fraudService = {
   getAlerts: async () => {
     // Only flag/suspicious transactions
     const alerts = await FraudLog.find({ 
-      status: { $in: ['HIGH_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED'] } 
+      status: { $in: ['HIGH_RISK', 'MEDIUM_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED'] } 
     }).sort({ createdAt: -1 }).limit(50); // Limit volume since it's a live feed
 
     // Map to alert format
@@ -130,7 +144,27 @@ export const fraudService = {
 
   // Task 2.5: Alert Detail API
   getAlertById: async (id) => {
-    const alert = await FraudLog.findById(id);
+    let alert;
+    if (id === 'USER-DEFAULT') {
+      alert = await FraudLog.findOne().sort({ createdAt: -1 });
+    } else {
+      try {
+        // Might be a valid ObjectId
+        alert = await FraudLog.findById(id);
+      } catch (err) {
+        // Not a valid ObjectId, ignore
+      }
+
+      if (!alert) {
+        alert = await FraudLog.findOne({ transactionId: id });
+      }
+      
+      if (!alert) {
+        // Try treating it as a userId
+        alert = await FraudLog.findOne({ userId: id }).sort({ createdAt: -1 });
+      }
+    }
+
     if (!alert) return null;
 
     // Fetch investigation data if exists
@@ -139,6 +173,7 @@ export const fraudService = {
     return {
       transactionDetails: {
         id: alert.transactionId,
+        userId: alert.userId,
         amount: alert.amount,
         merchant: alert.merchant,
         ip: alert.ip,

@@ -15,7 +15,16 @@ class MLPredictor:
         self._load_models()
 
     def _load_models(self):
+        import sys
+        import os
+        
+        # Save original stderr
+        original_stderr = sys.stderr
+        
         try:
+            # Redirect stderr to devnull to suppress C++ XGBoost warnings
+            sys.stderr = open(os.devnull, 'w')
+            
             model_path = os.path.join(self.models_dir, "model.pkl")
             scaler_path = os.path.join(self.models_dir, "scaler.pkl")
             features_path = os.path.join(self.models_dir, "feature_names.pkl")
@@ -26,9 +35,17 @@ class MLPredictor:
                 self.scaler = joblib.load(scaler_path)
             if os.path.exists(features_path):
                 self.feature_names = joblib.load(features_path)
-            logger.info("ML Models loaded successfully (if present).")
+                
         except Exception as e:
+            # Restore stderr and log warning
+            sys.stderr = original_stderr
             logger.warning(f"Could not load ML models ({e}). The system will safely use the Rule Engine fallback.")
+        finally:
+            # Always restore original stderr
+            if sys.stderr != original_stderr:
+                sys.stderr.close()
+                sys.stderr = original_stderr
+            logger.info("ML Models loaded successfully (if present).")
 
     def _extract_features(self, transaction):
         # Fallback to dummy features if real features are not well defined

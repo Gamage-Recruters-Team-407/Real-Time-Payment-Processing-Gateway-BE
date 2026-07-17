@@ -14,6 +14,7 @@ import { handleReview } from '../controllers/reviewController.js';
 import { startInvestigation, getInvestigationDetails, addNote, handleInvestigationAction } from '../controllers/investigationController.js';
 import { getEntityLinkData } from '../controllers/entityLinkController.js';
 import { getRegionalVelocity } from '../controllers/regionalController.js';
+import { runLivePrediction } from '../controllers/predictController.js';
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ router.post('/investigation/:id/action', handleInvestigationAction);
 // Graph & Analytics APIs (Day 5)
 router.get('/entity-link/:id', getEntityLinkData);
 router.get('/regional-velocity', getRegionalVelocity);
+router.get('/predict/:id', runLivePrediction);
 
 // Ingestion
 router.post('/process', processTransaction);

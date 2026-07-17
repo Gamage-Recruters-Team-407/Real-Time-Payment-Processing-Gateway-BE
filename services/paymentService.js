@@ -1,5 +1,6 @@
 import Payment from '../models/Payment.js';
 import { validateCardDetails } from '../utils/validateCard.js';
+import { createNotification } from './notificationService.js';
 
 /**
  * Processes a card payment.
@@ -12,6 +13,15 @@ export async function processCardPayment(paymentData) {
     // 1. Validate Card Details using validation utility
     const validation = validateCardDetails(cardDetails);
     if (!validation.isValid) {
+        // Fire-and-forget: a failed notification should never block the payment response.
+        if (userId) {
+            createNotification({
+                userId,
+                type: "payment_failed",
+                title: "Payment declined",
+                message: `Card validation failed: ${validation.errors?.join(", ") || "invalid card details"}.`,
+            }).catch((err) => console.error("Failed to create payment_failed notification:", err.message));
+        }
         return {
             success: false,
             message: "Validation failed",
@@ -42,6 +52,17 @@ export async function processCardPayment(paymentData) {
             // DB Save disabled for testing per user request:
             // await payment.save();
             console.log("\n============================================\n[TEST LOG] Card Payment processed:\n", payment, "\n============================================\n");
+
+            if (userId) {
+                createNotification({
+                    userId,
+                    type: "payment_success",
+                    title: "Payment received",
+                    message: `LKR ${Number(amount).toLocaleString("en-LK")} was successfully processed. Card ending ${lastFour}.`,
+                    actionLabel: "View receipt",
+                    link: `/payment-history`,
+                }).catch((err) => console.error("Failed to create payment_success notification:", err.message));
+            }
 
             return {
                 success: true,

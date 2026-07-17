@@ -2,7 +2,8 @@ import { generateRandomOTP, getExpiryDate } from "../utils/generateOTP.js";
 import { saveOTP, getOTP, updateAttempts, deleteOTP } from "../utils/otpStore.js";
 import { OTP_CONFIG, getEmailConfig } from "../config/otp.js";
 import nodemailer from "nodemailer";
-import User from "../models/User.js"; 
+import User from "../models/User.js";
+import { createNotification } from "./notificationService.js";
 
 const createTransporter = () => {
     const EMAIL_CONFIG = getEmailConfig();
@@ -86,6 +87,13 @@ export const generateOTPService = async (userId, email) => {
 
     saveOTP(key, otp, expiresAt);
     await sendOTPEmail(finalEmail, otp);
+
+    createNotification({
+        userId: finalUserId,
+        type: "otp",
+        title: "OTP verification required",
+        message: `A one-time code was sent to ${finalEmail}. It expires in ${OTP_CONFIG.EXPIRY_MINUTES} minutes.`,
+    }).catch((err) => console.error("Failed to create otp notification:", err.message));
 
     return { message: "OTP sent successfully", expiresAt };
 };

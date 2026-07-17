@@ -1,6 +1,7 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
 import { mlClient } from './mlClient.js';
+import { createNotification } from './notificationService.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
@@ -53,6 +54,16 @@ export const fraudService = {
     });
 
     await fraudLog.save();
+
+    if (status === 'BLOCKED' && transactionData.userId) {
+      createNotification({
+        userId: transactionData.userId,
+        type: "security",
+        title: "Suspicious transaction blocked",
+        message: `A transaction of ${transactionData.amount ?? ""} was blocked for review (risk score ${finalScore}).`,
+        actionLabel: "Review activity",
+      }).catch((err) => console.error("Failed to create security notification:", err.message));
+    }
 
     return {
       finalScore,

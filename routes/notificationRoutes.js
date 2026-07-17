@@ -7,13 +7,13 @@ import {
   deleteNotificationById,
   createNotificationManually,
 } from "../controllers/notificationController.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// All notification routes require a logged-in user (Dev 1/13's authMiddleware
-// is expected to set req.user = { id, ... } from the JWT).
-router.use(protect);
+// All notification routes require a logged-in user.
+// authMiddleware verifies the JWT and sets req.user = { id, email, role }.
+router.use(authMiddleware);
 
 router.get("/", getNotifications);
 router.get("/unread-count", getUnreadCount);

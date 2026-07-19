@@ -1,28 +1,47 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
-import { evaluateRules } from './ruleEngine.js';
-import { calculateRisk } from './riskScore.js';
+import Blacklist from '../models/Blacklist.js';
 import { mlClient } from './mlClient.js';
-import { runCypher } from './neo4j.js';
+import { createNotification } from './notificationService.js';
+import { getIO } from '../utils/socket.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
   processTransaction: async (transactionData) => {
-    // 1 & 2. Run rules
-    const { ruleScore, reasons } = await evaluateRules(transactionData);
-    
-    // Day 4: Call ML Model
+    // Call the unified Python ML & Rule Engine service
+    let finalScore = 0;
+    let ruleScore = 0;
     let mlScore = null;
+    let status = 'REVIEW';
+    let reasons = [];
+    
     const mlResponse = await mlClient.predictFraud(transactionData);
-    if (mlResponse && mlResponse.probability > 0.5) {
-      mlScore = mlResponse.risk_score;
-      reasons.push(`AI Model identified suspicious pattern (${mlScore}% risk)`);
-    } else if (mlResponse) {
-      mlScore = mlResponse.risk_score;
+    
+    if (mlResponse) {
+      // The Python Microservice successfully returned a verdict
+      ruleScore = mlResponse.rule_score;
+      mlScore = mlResponse.probability * 100;
+      finalScore = mlResponse.risk_score;
+      reasons = mlResponse.reasons || [];
+      
+      // Map status strictly to the risk score as requested
+      // The user wants below 50% to be low score
+      if (mlResponse.verdict === 'BLOCK') {
+        status = 'BLOCKED';
+      } else if (finalScore >= 80) {
+        status = 'HIGH_RISK';
+      } else if (finalScore >= 50) {
+        status = 'MEDIUM_RISK';
+      } else {
+        status = 'LOW_RISK';
+      }
+    } else {
+      // Fallback if Python service is offline
+      status = 'MEDIUM_RISK';
+      finalScore = 50; 
+      ruleScore = 50;
+      reasons = ['Fallback: Python Microservice is unreachable'];
     }
-
-    // 3 - 6. Calculate Risk Score and Status
-    const { finalScore, status } = calculateRisk(ruleScore, mlScore);
 
     // Save to MongoDB
     const fraudLog = new FraudLog({
@@ -42,28 +61,37 @@ export const fraudService = {
 
     await fraudLog.save();
 
-    // Save relationships to Neo4j for Entity Link Analysis
-    try {
-      const cypher = `
-        MERGE (u:Account {id: $userId})
-        MERGE (ip:Ip {id: $ip})
-        MERGE (d:Device {id: $deviceId})
-        MERGE (m:Merchant {id: $merchant})
-        MERGE (t:Transaction {id: $transactionId})
-        MERGE (u)-[:USES_IP]->(ip)
-        MERGE (u)-[:USES_DEVICE]->(d)
-        MERGE (u)-[:PAYMENT_TO]->(m)
-        MERGE (u)-[:PERFORMED]->(t)
-      `;
-      await runCypher(cypher, {
-        userId: transactionData.userId || 'Unknown',
-        transactionId: transactionData.transactionId || 'Unknown',
-        ip: transactionData.ip || 'Unknown',
-        deviceId: transactionData.deviceId || 'Unknown',
-        merchant: transactionData.merchant || 'Unknown'
-      });
-    } catch (e) {
-      console.error('Failed to save to Neo4j:', e.message);
+    if (status === 'BLOCKED' && transactionData.userId) {
+      createNotification({
+        userId: transactionData.userId,
+        type: "security",
+        title: "Suspicious transaction blocked",
+        message: `A transaction of ${transactionData.amount ?? ""} was blocked for review (risk score ${finalScore}).`,
+        actionLabel: "Review activity",
+      }).catch((err) => console.error("Failed to create security notification:", err.message));
+    }
+
+    if (['HIGH_RISK', 'BLOCKED', 'REVIEW', 'MEDIUM_RISK', 'ESCALATED', 'LOW_RISK'].includes(status)) {
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('new_alert', {
+            id: fraudLog._id,
+            transactionId: fraudLog.transactionId,
+            timestamp: fraudLog.createdAt || new Date(),
+            accountId: fraudLog.userId,
+            amount: fraudLog.amount,
+            riskScore: fraudLog.riskScore,
+            severity: fraudLog.status === 'BLOCKED' ? 'CRITICAL' : (fraudLog.status === 'HIGH_RISK' ? 'HIGH' : 'MEDIUM'),
+            alertReason: fraudLog.alertReason,
+            actions: ['INVESTIGATE', 'FREEZE', 'DISMISS'],
+            ip: fraudLog.ip,
+            merchant: fraudLog.merchant
+          });
+        }
+      } catch (err) {
+        console.error('Socket error:', err);
+      }
     }
 
     return {
@@ -78,16 +106,18 @@ export const fraudService = {
   // Task 2.2: Dashboard Metrics API
   getDashboardMetrics: async () => {
     const blockedAttempts = await FraudLog.countDocuments({ status: 'BLOCKED' });
-    const suspiciousPatterns = await FraudLog.countDocuments({ status: 'HIGH_RISK' });
+    const suspiciousPatterns = await FraudLog.countDocuments({});
+    const fraudListCount = await Blacklist.countDocuments({});
     
     // Distinct users with riskScore > 80
     const highRiskEntities = (await FraudLog.distinct('userId', { riskScore: { $gt: 80 } })).length;
     
-    // Using Investigation model for cases
-    const openCases = await Investigation.countDocuments({ status: { $in: ['CREATE', 'UNDER_REVIEW'] } });
+    // Count all transactions that have not yet been resolved (still need Review or Investigate)
+    const openCases = await FraudLog.countDocuments({ status: { $in: ['LOW_RISK', 'MEDIUM_RISK', 'HIGH_RISK', 'REVIEW', 'UNDER_REVIEW'] } });
     const escalated = await Investigation.countDocuments({ status: 'ESCALATED' });
 
     return {
+      fraudList: { value: fraudListCount, change: "+0%" },
       blockedAttempts: { value: blockedAttempts, change: "+0%" },
       suspiciousPatterns: { value: suspiciousPatterns, status: "Real-time AI monitoring active" },
       highRiskEntities: { value: highRiskEntities, openCases, escalated }
@@ -106,8 +136,20 @@ export const fraudService = {
     if (search) {
       filter.$or = [
         { transactionId: { $regex: search, $options: 'i' } },
-        { merchant: { $regex: search, $options: 'i' } }
+        { merchant: { $regex: search, $options: 'i' } },
+        { userId: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    // Exclude blacklisted entities from the general transaction stream as well
+    const blacklistedEntities = await Blacklist.find().select('entityId');
+    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
+
+    if (blacklistedIds.length > 0) {
+      filter.userId = { $nin: blacklistedIds };
+      filter.ip = { $nin: blacklistedIds };
+      filter.deviceId = { $nin: blacklistedIds };
+      filter.merchant = { $nin: blacklistedIds };
     }
 
     const skip = (page - 1) * limit;
@@ -132,9 +174,17 @@ export const fraudService = {
 
   // Task 2.4: Alert List API
   getAlerts: async () => {
+    // Get all blacklisted entity IDs to filter them out
+    const blacklistedEntities = await Blacklist.find().select('entityId');
+    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
+
     // Only flag/suspicious transactions
     const alerts = await FraudLog.find({ 
-      status: { $in: ['HIGH_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED'] } 
+      status: { $in: ['HIGH_RISK', 'MEDIUM_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED', 'LOW_RISK'] },
+      userId: { $nin: blacklistedIds },
+      ip: { $nin: blacklistedIds },
+      deviceId: { $nin: blacklistedIds },
+      merchant: { $nin: blacklistedIds }
     }).sort({ createdAt: -1 }).limit(50); // Limit volume since it's a live feed
 
     // Map to alert format
@@ -155,7 +205,27 @@ export const fraudService = {
 
   // Task 2.5: Alert Detail API
   getAlertById: async (id) => {
-    const alert = await FraudLog.findById(id);
+    let alert;
+    if (id === 'USER-DEFAULT') {
+      alert = await FraudLog.findOne().sort({ createdAt: -1 });
+    } else {
+      try {
+        // Might be a valid ObjectId
+        alert = await FraudLog.findById(id);
+      } catch (err) {
+        // Not a valid ObjectId, ignore
+      }
+
+      if (!alert) {
+        alert = await FraudLog.findOne({ transactionId: id });
+      }
+      
+      if (!alert) {
+        // Try treating it as a userId
+        alert = await FraudLog.findOne({ userId: id }).sort({ createdAt: -1 });
+      }
+    }
+
     if (!alert) return null;
 
     // Fetch investigation data if exists
@@ -164,6 +234,7 @@ export const fraudService = {
     return {
       transactionDetails: {
         id: alert.transactionId,
+        userId: alert.userId,
         amount: alert.amount,
         merchant: alert.merchant,
         ip: alert.ip,

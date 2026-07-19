@@ -1,4 +1,5 @@
 import express from "express";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 import {
   createPayment,
@@ -11,18 +12,18 @@ import {
 const router = express.Router();
 
 // Create new payment
-router.post("/", createPayment);
+router.post("/", authMiddleware, createPayment);
 
 // Admin - get all payments
-router.get("/admin/all", getAllPayments);
+router.get("/admin/all", authMiddleware, getAllPayments);
 
 // Get payment by MongoDB Object ID
-router.get("/object/:id", getPaymentByObjectId);
+router.get("/object/:id", authMiddleware, getPaymentByObjectId);
 
 // Get payment by custom payment ID
-router.get("/:paymentId", getPaymentById);
+router.get("/:paymentId", authMiddleware, getPaymentById);
 
 // Update payment status
-router.patch("/:paymentId/status", updatePaymentStatus);
+router.patch("/:paymentId/status", authMiddleware, updatePaymentStatus);
 
 export default router;

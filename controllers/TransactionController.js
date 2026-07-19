@@ -227,6 +227,17 @@ const attachRefundSummary = async (transactions) => {
     const relatedRefunds =
       refundsByTransactionId.get(transaction.transactionId) || [];
 
+    // Calculate days elapsed since transaction creation
+    const createdTime = new Date(transaction.createdAt).getTime();
+    const currentTime = new Date().getTime();
+    const diffDays = (currentTime - createdTime) / (1000 * 60 * 60 * 24);
+    const hasRefundRequest = relatedRefunds.length > 0;
+    const isSuccessful =
+      transaction.status === "Successful" || transaction.status === "Completed";
+    
+      // 7-day rule check
+    const isRefundable = isSuccessful && !hasRefundRequest && diffDays <= 7;
+
     return {
       ...transaction,
       refundSummary: {
@@ -438,3 +449,32 @@ export const exportTransactions = async (req, res) => {
     return res.status(500).json({ message: "Failed to export transactions" });
   }
 };
+
+export const getTransactionSummary = async (req, res) => {
+  try {
+    const [all, successful, failed, flagged] = await Promise.all([
+      Transaction.find({}).select("amount").lean(),
+      Transaction.countDocuments({ status: "Successful" }),
+      Transaction.countDocuments({ status: "Failed" }),
+      Transaction.countDocuments({ status: "Flagged" }),
+    ]);
+
+    const totalVolume = all.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const totalCount = all.length;
+    const successRatePct =
+      totalCount > 0 ? ((successful / totalCount) * 100).toFixed(1) : "0.0";
+
+    return res.json({
+      totalVolume,
+      successfulCount: successful,
+      failedCount: failed,
+      flaggedCount: flagged,
+      successRatePct: parseFloat(successRatePct),
+      totalVolumeChangePct: 12.5, // placeholder; add real calculation when you have historical data
+    });
+  } catch (error) {
+    console.error("Failed to fetch summary:", error);
+    return res.status(500).json({ message: "Failed to fetch transaction summary" });
+  }
+};
+

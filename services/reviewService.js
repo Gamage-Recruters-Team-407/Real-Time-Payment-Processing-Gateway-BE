@@ -38,8 +38,8 @@ export const reviewService = {
       // Auto add to blacklist
       try {
         const blacklistEntry = new Blacklist({
-          entityType: 'USER',
-          entityValue: alert.userId,
+          entityType: 'ACCOUNT',
+          entityId: alert.userId,
           reason: notes || 'Auto-blacklisted due to manual BLOCK review',
           addedBy: performedBy
         });

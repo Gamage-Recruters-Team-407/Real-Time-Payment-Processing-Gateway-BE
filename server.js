@@ -1,5 +1,7 @@
 import express from "express";
+import { createServer } from "http";
 import cors from "cors";
+import { initSocket } from "./utils/socket.js";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -18,6 +20,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 dotenv.config({ path: "./.env" });
 
 const app = express();
+const httpServer = createServer(app);
 app.set("trust proxy", true);
 
 app.use(helmet());
@@ -27,7 +30,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 5000, // Increased limit for live polling
   validate: { trustProxy: false },
 });
 app.use(limiter);
@@ -56,7 +59,9 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    app.listen(PORT, async () => {
+    initSocket(httpServer);
+    
+    httpServer.listen(PORT, async () => {
       console.log(`Server running on port ${PORT}`);
       // Ping the ML microservice on startup to show success message
       await mlClient.verifyConnection();

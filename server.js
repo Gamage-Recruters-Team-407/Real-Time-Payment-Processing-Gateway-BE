@@ -1,4 +1,7 @@
 import express from "express";
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+
 import { createServer } from "http";
 import cors from "cors";
 import { initSocket } from "./utils/socket.js";

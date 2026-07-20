@@ -104,3 +104,17 @@ export const investigateAlert = async (req, res) => {
     res.status(500).json({ error: 'Failed to investigate alert' });
   }
 };
+
+export const deleteTransaction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await FraudLog.findByIdAndDelete(id);
+    if (!result) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    res.json({ message: 'Transaction deleted successfully', id });
+  } catch (error) {
+    console.error('Error deleting transaction:', error);
+    res.status(500).json({ error: 'Failed to delete transaction' });
+  }
+};

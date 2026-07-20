@@ -4,7 +4,9 @@ import Blacklist from '../models/Blacklist.js';
 
 export const actionService = {
   freezeTransaction: async (id, notes, performedBy) => {
-    const alert = await FraudLog.findById(id);
+    let alert;
+    try { alert = await FraudLog.findById(id); } catch (e) {}
+    if (!alert) alert = await FraudLog.findOne({ transactionId: id });
     if (!alert) throw new Error("Transaction not found");
     
     alert.status = 'FROZEN';
@@ -15,7 +17,9 @@ export const actionService = {
   },
   
   blockTransaction: async (id, notes, performedBy) => {
-    const alert = await FraudLog.findById(id);
+    let alert;
+    try { alert = await FraudLog.findById(id); } catch (e) {}
+    if (!alert) alert = await FraudLog.findOne({ transactionId: id });
     if (!alert) throw new Error("Transaction not found");
     
     alert.status = 'BLOCKED';
@@ -25,8 +29,8 @@ export const actionService = {
     // Auto add to blacklist
     try {
       const blacklistEntry = new Blacklist({
-        entityType: 'USER',
-        entityValue: alert.userId,
+        entityType: 'ACCOUNT',
+        entityId: alert.userId,
         reason: notes || 'Auto-blacklisted due to BLOCK action',
         addedBy: performedBy
       });
@@ -51,7 +55,9 @@ export const actionService = {
   },
   
   releaseTransaction: async (id, notes, performedBy) => {
-    const alert = await FraudLog.findById(id);
+    let alert;
+    try { alert = await FraudLog.findById(id); } catch (e) {}
+    if (!alert) alert = await FraudLog.findOne({ transactionId: id });
     if (!alert) throw new Error("Transaction not found");
     
     alert.status = 'CLEARED';

@@ -9,6 +9,7 @@ import {
 import { handleAction } from '../controllers/actionController.js';
 import { handleWhitelist } from '../controllers/whitelistController.js';
 import { handleReview } from '../controllers/reviewController.js';
+import { getBlacklist, removeFromBlacklist, reInvestigateEntity } from '../controllers/blacklistController.js';
 
 // Day 5 Controllers
 import { startInvestigation, getInvestigationDetails, addNote, handleInvestigationAction } from '../controllers/investigationController.js';
@@ -30,6 +31,11 @@ router.get('/alerts/:id', getAlertById);
 router.post('/transactions/:id/action', handleAction);
 router.post('/transactions/:id/review', handleReview);
 router.post('/whitelist', handleWhitelist);
+
+// Blacklist APIs
+router.get('/blacklist', getBlacklist);
+router.delete('/blacklist/:id', removeFromBlacklist);
+router.post('/blacklist/:id/reinvestigate', reInvestigateEntity);
 
 // Investigation APIs (Day 5)
 router.post('/alerts/:id/investigate', startInvestigation);

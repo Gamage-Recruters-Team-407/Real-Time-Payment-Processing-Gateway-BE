@@ -4,7 +4,13 @@ import Blacklist from '../models/Blacklist.js';
 
 export const investigationService = {
   startInvestigation: async (alertId, assignedTo, priority, notes) => {
-    const alert = await FraudLog.findById(alertId);
+    let alert;
+    try {
+      alert = await FraudLog.findById(alertId);
+    } catch (err) {}
+    if (!alert) {
+      alert = await FraudLog.findOne({ transactionId: alertId });
+    }
     if (!alert) throw new Error("Alert not found");
 
     const caseId = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -92,7 +98,7 @@ export const investigationService = {
       if (alert) { 
         alert.status = 'BLOCKED'; await alert.save(); 
         try {
-          await new Blacklist({ entityType: 'USER', entityValue: alert.userId, reason, addedBy: performedBy }).save();
+          await new Blacklist({ entityType: 'ACCOUNT', entityId: alert.userId, reason, addedBy: performedBy }).save();
         } catch(e) {}
       }
 

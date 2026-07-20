@@ -1,7 +1,9 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
+import Blacklist from '../models/Blacklist.js';
 import { mlClient } from './mlClient.js';
 import { createNotification } from './notificationService.js';
+import { getIO } from '../utils/socket.js';
 
 export const fraudService = {
   // Task 2.X: Process a new transaction
@@ -23,9 +25,13 @@ export const fraudService = {
       reasons = mlResponse.reasons || [];
       
       // Map status strictly to the risk score as requested
-      // The user wants ANY detection of fraud (medium or high) to automatically BLOCK the transaction
-      if (finalScore >= 40 || mlResponse.verdict === 'BLOCK') {
+      // The user wants below 50% to be low score
+      if (mlResponse.verdict === 'BLOCK') {
         status = 'BLOCKED';
+      } else if (finalScore >= 80) {
+        status = 'HIGH_RISK';
+      } else if (finalScore >= 50) {
+        status = 'MEDIUM_RISK';
       } else {
         status = 'LOW_RISK';
       }
@@ -65,6 +71,29 @@ export const fraudService = {
       }).catch((err) => console.error("Failed to create security notification:", err.message));
     }
 
+    if (['HIGH_RISK', 'BLOCKED', 'REVIEW', 'MEDIUM_RISK', 'ESCALATED', 'LOW_RISK'].includes(status)) {
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('new_alert', {
+            id: fraudLog._id,
+            transactionId: fraudLog.transactionId,
+            timestamp: fraudLog.createdAt || new Date(),
+            accountId: fraudLog.userId,
+            amount: fraudLog.amount,
+            riskScore: fraudLog.riskScore,
+            severity: fraudLog.status === 'BLOCKED' ? 'CRITICAL' : (fraudLog.status === 'HIGH_RISK' ? 'HIGH' : 'MEDIUM'),
+            alertReason: fraudLog.alertReason,
+            actions: ['INVESTIGATE', 'FREEZE', 'DISMISS'],
+            ip: fraudLog.ip,
+            merchant: fraudLog.merchant
+          });
+        }
+      } catch (err) {
+        console.error('Socket error:', err);
+      }
+    }
+
     return {
       finalScore,
       status,
@@ -78,6 +107,7 @@ export const fraudService = {
   getDashboardMetrics: async () => {
     const blockedAttempts = await FraudLog.countDocuments({ status: 'BLOCKED' });
     const suspiciousPatterns = await FraudLog.countDocuments({});
+    const fraudListCount = await Blacklist.countDocuments({});
     
     // Distinct users with riskScore > 80
     const highRiskEntities = (await FraudLog.distinct('userId', { riskScore: { $gt: 80 } })).length;
@@ -87,6 +117,7 @@ export const fraudService = {
     const escalated = await Investigation.countDocuments({ status: 'ESCALATED' });
 
     return {
+      fraudList: { value: fraudListCount, change: "+0%" },
       blockedAttempts: { value: blockedAttempts, change: "+0%" },
       suspiciousPatterns: { value: suspiciousPatterns, status: "Real-time AI monitoring active" },
       highRiskEntities: { value: highRiskEntities, openCases, escalated }
@@ -108,6 +139,17 @@ export const fraudService = {
         { merchant: { $regex: search, $options: 'i' } },
         { userId: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    // Exclude blacklisted entities from the general transaction stream as well
+    const blacklistedEntities = await Blacklist.find().select('entityId');
+    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
+
+    if (blacklistedIds.length > 0) {
+      filter.userId = { $nin: blacklistedIds };
+      filter.ip = { $nin: blacklistedIds };
+      filter.deviceId = { $nin: blacklistedIds };
+      filter.merchant = { $nin: blacklistedIds };
     }
 
     const skip = (page - 1) * limit;
@@ -132,9 +174,17 @@ export const fraudService = {
 
   // Task 2.4: Alert List API
   getAlerts: async () => {
+    // Get all blacklisted entity IDs to filter them out
+    const blacklistedEntities = await Blacklist.find().select('entityId');
+    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
+
     // Only flag/suspicious transactions
     const alerts = await FraudLog.find({ 
-      status: { $in: ['HIGH_RISK', 'MEDIUM_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED'] } 
+      status: { $in: ['HIGH_RISK', 'MEDIUM_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED', 'LOW_RISK'] },
+      userId: { $nin: blacklistedIds },
+      ip: { $nin: blacklistedIds },
+      deviceId: { $nin: blacklistedIds },
+      merchant: { $nin: blacklistedIds }
     }).sort({ createdAt: -1 }).limit(50); // Limit volume since it's a live feed
 
     // Map to alert format

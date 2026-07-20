@@ -1,6 +1,8 @@
 import Investigation from '../models/Investigation.js';
 import FraudLog from '../models/FraudLog.js';
 import Blacklist from '../models/Blacklist.js';
+import Payment from '../models/Payment.js';
+import { updatePaymentStatusInService } from './paymentService.js';
 
 export const investigationService = {
   startInvestigation: async (alertId, assignedTo, priority, notes) => {
@@ -29,6 +31,7 @@ export const investigationService = {
 
     // Update alert status
     alert.status = 'REVIEW';
+    alert.investigation.caseId = caseId;
     await alert.save();
 
     return investigation;
@@ -90,7 +93,20 @@ export const investigationService = {
       investigation.status = 'RESOLVED';
       investigation.decision = 'CLEAR';
       investigation.timeline.push({ event: `Case Approved by ${performedBy}`, timestamp: new Date() });
-      if (alert) { alert.status = 'CLEARED'; await alert.save(); }
+      if (alert) { 
+        alert.status = 'CLEARED'; 
+        await alert.save(); 
+        
+        // Release actual payment money
+        try {
+          const payment = await Payment.findOne({ $or: [{ paymentId: alert.transactionId }, { transactionId: alert.transactionId }] });
+          if (payment && payment.status !== 'COMPLETED') {
+            await updatePaymentStatusInService(payment.paymentId, { status: 'COMPLETED' });
+          }
+        } catch (e) {
+          console.error("Failed to release payment money:", e.message);
+        }
+      }
     } else if (actionUpper === 'BLOCK') {
       investigation.status = 'RESOLVED';
       investigation.decision = 'BLOCK';

@@ -1,11 +1,12 @@
 import * as userService from '../services/userService.js';
 import { validationResult } from 'express-validator';
+import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 import {
   findUserById,
   getDashboardStats,
   updateUserProfile,
 } from "../services/userService.js";
-
 
 // -----------------------------------------------------------------------
 // GET /api/users/me
@@ -95,7 +96,7 @@ export const updateProfile = async (req, res) => {
 
 export const createUser = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const user = await userService.createUser(req.body);
@@ -111,6 +112,9 @@ export const listUsers = async (req, res) => {
     const result = await userService.getUsers({ page, limit, search, role });
     return res.json({ success: true, ...result });
   } catch (err) {
+    if (err.message === 'Invalid role') {
+      return res.status(400).json({ success: false, message: err.message });
+    }
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -120,25 +124,66 @@ export const getUser = async (req, res) => {
     const user = await userService.getUserById(req.params.id);
     return res.json({ success: true, data: user });
   } catch (err) {
+    if (err.message === 'Invalid user id') {
+      return res.status(400).json({ success: false, message: err.message });
+    }
     return res.status(404).json({ success: false, message: err.message });
   }
 };
 
 export const updateUser = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
+
   try {
     const user = await userService.updateUser(req.params.id, req.body);
     return res.json({ success: true, data: user });
   } catch (err) {
+    if (err.message === 'Invalid user id' || err.message === 'Invalid user payload') {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    if (err.message === 'User not found') {
+      return res.status(404).json({ success: false, message: err.message });
+    }
     return res.status(400).json({ success: false, message: err.message });
   }
 };
 
 export const removeUser = async (req, res) => {
   try {
+    if (req.user && req.user.id === req.params.id) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own account' });
+    }
     await userService.deleteUser(req.params.id);
     return res.json({ success: true, message: 'User deleted' });
   } catch (err) {
+    if (err.message === 'Invalid user id') {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    if (err.message === 'User not found') {
+      return res.status(404).json({ success: false, message: err.message });
+    }
     return res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+export const getMerchantByName = async (req, res) => {
+  try {
+    const { name } = req.params;
+    if (!name) {
+      return res.status(400).json({ error: 'Merchant name is required' });
+    }
+
+    const merchant = await User.findOne({ name });
+    
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant not found' });
+    }
+
+    res.json(merchant);
+  } catch (error) {
+    console.error('Error fetching merchant profile:', error);
+    res.status(500).json({ error: 'Failed to fetch merchant profile' });
   }
 };
 
@@ -148,4 +193,5 @@ export default {
   getUser,
   updateUser,
   removeUser,
+  getMerchantByName,
 };

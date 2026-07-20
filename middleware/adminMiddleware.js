@@ -4,13 +4,15 @@ export const adminMiddleware = (req, res, next) => {
     return res.status(403).json({ message: 'Forbidden: No role present' });
   }
 
+  const normalizedRole = String(user.role).trim();
   const allowed = [
     'System Administrator',
     'Merchant Administrator',
-    'Admin'
+    'Admin',
+    'admin'
   ];
 
-  if (!allowed.includes(user.role)) {
+  if (!allowed.includes(normalizedRole)) {
     return res.status(403).json({ message: 'Forbidden: Admins only' });
   }
 

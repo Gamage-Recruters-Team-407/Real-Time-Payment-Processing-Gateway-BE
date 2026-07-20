@@ -1,6 +1,7 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
 import Blacklist from '../models/Blacklist.js';
+import Whitelist from '../models/Whitelist.js';
 import { mlClient } from './mlClient.js';
 import { createNotification } from './notificationService.js';
 import { getIO } from '../utils/socket.js';
@@ -43,6 +44,19 @@ export const fraudService = {
       reasons = ['Fallback: Python Microservice is unreachable'];
     }
 
+    let finalLocation = transactionData.location || 'Unknown';
+    if (finalLocation === 'Unknown' && transactionData.ip && transactionData.ip !== 'Unknown') {
+      try {
+        const ipResponse = await fetch(`http://ip-api.com/json/${transactionData.ip}`);
+        const ipData = await ipResponse.json();
+        if (ipData.status === 'success') {
+          finalLocation = `${ipData.city}, ${ipData.country}`;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch IP location', e);
+      }
+    }
+
     // Save to MongoDB
     const fraudLog = new FraudLog({
       transactionId: transactionData.transactionId,
@@ -56,7 +70,9 @@ export const fraudService = {
       status: status,
       alertReason: reasons.join(', '),
       actions: [],
-      location: transactionData.location
+      location: finalLocation,
+      lat: transactionData.lat,
+      lon: transactionData.lon
     });
 
     await fraudLog.save();
@@ -141,17 +157,6 @@ export const fraudService = {
       ];
     }
 
-    // Exclude blacklisted entities from the general transaction stream as well
-    const blacklistedEntities = await Blacklist.find().select('entityId');
-    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
-
-    if (blacklistedIds.length > 0) {
-      filter.userId = { $nin: blacklistedIds };
-      filter.ip = { $nin: blacklistedIds };
-      filter.deviceId = { $nin: blacklistedIds };
-      filter.merchant = { $nin: blacklistedIds };
-    }
-
     const skip = (page - 1) * limit;
     const sort = { [sortField]: sortOrder === 'asc' ? 1 : -1 };
 
@@ -162,8 +167,20 @@ export const fraudService = {
 
     const total = await FraudLog.countDocuments(filter);
 
+    // Populate whitelisted flag
+    const whitelistedEntities = await Whitelist.find().select('entityId');
+    const whitelistedIds = new Set(whitelistedEntities.map(w => w.entityId));
+
+    const data = transactions.map(tx => {
+      const txObj = tx.toObject();
+      if (whitelistedIds.has(txObj.userId) || whitelistedIds.has(txObj.ip) || whitelistedIds.has(txObj.deviceId) || whitelistedIds.has(txObj.merchant)) {
+        txObj.whitelisted = true;
+      }
+      return txObj;
+    });
+
     return {
-      data: transactions,
+      data,
       pagination: {
         total,
         page: Number(page),
@@ -174,17 +191,21 @@ export const fraudService = {
 
   // Task 2.4: Alert List API
   getAlerts: async () => {
-    // Get all blacklisted entity IDs to filter them out
+    // Get all blacklisted and whitelisted entity IDs to filter them out of new alerts
     const blacklistedEntities = await Blacklist.find().select('entityId');
-    const blacklistedIds = blacklistedEntities.map(b => b.entityId);
+    const whitelistedEntities = await Whitelist.find().select('entityId');
+    const excludedIds = [
+      ...blacklistedEntities.map(b => b.entityId),
+      ...whitelistedEntities.map(w => w.entityId)
+    ];
 
     // Only flag/suspicious transactions
     const alerts = await FraudLog.find({ 
       status: { $in: ['HIGH_RISK', 'MEDIUM_RISK', 'REVIEW', 'BLOCKED', 'ESCALATED', 'LOW_RISK'] },
-      userId: { $nin: blacklistedIds },
-      ip: { $nin: blacklistedIds },
-      deviceId: { $nin: blacklistedIds },
-      merchant: { $nin: blacklistedIds }
+      userId: { $nin: excludedIds },
+      ip: { $nin: excludedIds },
+      deviceId: { $nin: excludedIds },
+      merchant: { $nin: excludedIds }
     }).sort({ createdAt: -1 }).limit(50); // Limit volume since it's a live feed
 
     // Map to alert format

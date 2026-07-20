@@ -8,6 +8,7 @@ import {
   findAllPayments,
   updatePaymentStatusInService
 } from "../services/paymentService.js";
+import { fraudService } from "../services/fraudService.js";
 
 const PRIMARY_DESTINATION_ACCOUNT = "PRIMARY_BANK_ACCOUNT";
 
@@ -34,6 +35,8 @@ export const createPayment = async (req, res) => {
       description = "",
       paymentMethod = "CARD",
       cardDetails,
+      deviceId,
+      ipAddress,
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -108,6 +111,34 @@ export const createPayment = async (req, res) => {
         destinationAccountKey: PRIMARY_DESTINATION_ACCOUNT,
       });
     }
+
+      // INTEGRATE WITH FRAUD SYSTEM
+      try {
+        const userId = req.user?._id || req.user?.id || "USER-DEFAULT";
+        // The merchant name is not explicitly passed by standard payment, so we use description or a generic name.
+        const merchantName = description ? description : "System Merchant";
+        
+        const fraudResult = await fraudService.processTransaction({
+          transactionId: payment.transactionId || payment.paymentId,
+          userId: userId.toString(),
+          amount: numericAmount,
+          merchant: merchantName,
+          ip: ipAddress || req.ip || "Unknown",
+          deviceId: deviceId || "Unknown"
+        });
+
+        // ENFORCE FRAUD BLOCK
+        if (fraudResult && fraudResult.status === 'BLOCKED') {
+          await updatePaymentStatusInService(payment.paymentId, { status: "FAILED" });
+          return res.status(403).json({
+            success: false,
+            message: "Transaction blocked by fraud engine due to high risk.",
+            fraudStatus: "BLOCKED"
+          });
+        }
+      } catch (fraudErr) {
+        console.error("Failed to process transaction through Fraud System:", fraudErr);
+      }
 
     return res.status(201).json({
       success: true,

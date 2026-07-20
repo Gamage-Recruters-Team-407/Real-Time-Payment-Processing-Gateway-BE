@@ -1,6 +1,8 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
 import Blacklist from '../models/Blacklist.js';
+import Payment from '../models/Payment.js';
+import { updatePaymentStatusInService } from './paymentService.js';
 
 export const actionService = {
   freezeTransaction: async (id, notes, performedBy) => {
@@ -74,6 +76,16 @@ export const actionService = {
       }
     } catch (e) {
       console.error("Failed to close investigation:", e.message);
+    }
+    
+    // Release actual payment money
+    try {
+      const payment = await Payment.findOne({ $or: [{ paymentId: alert.transactionId }, { transactionId: alert.transactionId }] });
+      if (payment && payment.status !== 'COMPLETED') {
+        await updatePaymentStatusInService(payment.paymentId, { status: 'COMPLETED' });
+      }
+    } catch (e) {
+      console.error("Failed to release payment money:", e.message);
     }
     
     return alert;

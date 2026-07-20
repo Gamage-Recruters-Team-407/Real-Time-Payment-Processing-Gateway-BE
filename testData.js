@@ -31,6 +31,34 @@ const transactions = [
     deviceId: 'DEV-A3',
     type: 'PAYMENT'
   },
+  // History for USER-004
+  {
+    transactionId: 'TXN-' + (Date.now() - 100000) + '-4',
+    userId: 'USER-004',
+    amount: 25.00,
+    merchant: 'Coffee Shop',
+    ip: '192.168.1.10',
+    deviceId: 'DEV-A1',
+    type: 'PAYMENT'
+  },
+  {
+    transactionId: 'TXN-' + (Date.now() - 50000) + '-4',
+    userId: 'USER-004',
+    amount: 45.00,
+    merchant: 'Book Store',
+    ip: '192.168.1.10',
+    deviceId: 'DEV-A1',
+    type: 'PAYMENT'
+  },
+  {
+    transactionId: 'TXN-' + (Date.now() - 10000) + '-4',
+    userId: 'USER-004',
+    amount: 15.00,
+    merchant: 'Coffee Shop',
+    ip: '192.168.1.10',
+    deviceId: 'DEV-A1',
+    type: 'PAYMENT'
+  },
   // 4. Medium Risk Transaction (High value for typical profile)
   {
     transactionId: 'TXN-' + Date.now() + '-4',
@@ -39,6 +67,25 @@ const transactions = [
     merchant: 'Flight Tickets',
     ip: '192.168.1.10',
     deviceId: 'DEV-A1',
+    type: 'PAYMENT'
+  },
+  // History for USER-005
+  {
+    transactionId: 'TXN-' + (Date.now() - 200000) + '-5',
+    userId: 'USER-005',
+    amount: 1200.00,
+    merchant: 'Luxury Watches',
+    ip: '198.51.100.12',
+    deviceId: 'DEV-B2',
+    type: 'PAYMENT'
+  },
+  {
+    transactionId: 'TXN-' + (Date.now() - 150000) + '-5',
+    userId: 'USER-005',
+    amount: 300.00,
+    merchant: 'Boutique',
+    ip: '198.51.100.12',
+    deviceId: 'DEV-B2',
     type: 'PAYMENT'
   },
   // 5. Automatically Blocked Transaction (Flagged by ML / High Amount)

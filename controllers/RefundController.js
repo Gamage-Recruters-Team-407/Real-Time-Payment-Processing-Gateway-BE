@@ -2,7 +2,6 @@ import Refund from "../models/Refund.js";
 import Transaction from "../models/Transaction.js";
 import * as refundService from "../services/refundService.js";
 
-
 const generateRefundId = () => {
 
   const date = new Date();

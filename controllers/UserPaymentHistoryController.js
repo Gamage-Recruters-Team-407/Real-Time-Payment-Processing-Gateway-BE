@@ -5,14 +5,16 @@ const REFUND_WINDOW_DAYS = 7;
 
 const attachRefundSummary = async (payments) => {
   if (!payments.length) return payments;
-  const paymentIds = payments.map((p) => p.paymentId).filter(Boolean);
-  if (!paymentIds.length) return payments;
+  const transactionIds = payments
+    .map((p) => p.transactionId || p.paymentId)
+    .filter(Boolean);
+  if (!transactionIds.length) return payments;
 
   const refunds = await Refund.find({
-    transactionId: { $in: paymentIds },
+    transactionId: { $in: transactionIds },
   }).lean();
 
-  const refundsByPaymentId = refunds.reduce((acc, refund) => {
+  const refundsByTransactionId = refunds.reduce((acc, refund) => {
     const current = acc.get(refund.transactionId) || [];
     current.push(refund);
     acc.set(refund.transactionId, current);
@@ -20,19 +22,23 @@ const attachRefundSummary = async (payments) => {
   }, new Map());
 
   return payments.map((p) => {
-    const relatedRefunds = refundsByPaymentId.get(p.paymentId) || [];
+    const txnId = p.transactionId || p.paymentId;
+    const relatedRefunds = refundsByTransactionId.get(txnId) || [];
     const createdTime = new Date(p.createdAt).getTime();
     const currentTime = Date.now();
     const diffDays = (currentTime - createdTime) / (1000 * 60 * 60 * 24);
     const hasRefundRequest = relatedRefunds.length > 0;
-    const isRefundable = p.status === "COMPLETED" && !hasRefundRequest && diffDays <= REFUND_WINDOW_DAYS;
+    const isRefundable =
+      p.status === "COMPLETED" && !hasRefundRequest && diffDays <= REFUND_WINDOW_DAYS;
 
     return {
       ...p,
       refundSummary: {
         hasRefundRequest,
         refundCount: relatedRefunds.length,
-        latestRefundStatus: hasRefundRequest ? relatedRefunds[relatedRefunds.length - 1].status : null,
+        latestRefundStatus: hasRefundRequest
+          ? relatedRefunds[relatedRefunds.length - 1].status
+          : null,
         isRefundable,
       },
     };
@@ -134,16 +140,33 @@ export const getPaymentSummary = async (req, res) => {
     }
 
     const [all, successful, failed, pending] = await Promise.all([
-      Payment.find(query).select("amount status").lean(),
+      Payment.find(query).select("amount status transactionId paymentId").lean(),
       Payment.countDocuments({ ...query, status: "COMPLETED" }),
       Payment.countDocuments({ ...query, status: "FAILED" }),
       Payment.countDocuments({ ...query, status: "PENDING" }),
     ]);
 
+    const completedPayments = all.filter((p) => p.status === "COMPLETED");
+    const grossVolume = completedPayments.reduce(
+      (sum, p) => sum + (Number(p.amount) || 0),
+      0
+    );
 
-    const totalVolume = all
-      .filter((p) => p.status === "COMPLETED")
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const txnIds = completedPayments
+      .map((p) => p.transactionId || p.paymentId)
+      .filter(Boolean);
+    const approvedRefunds = await Refund.find({
+      transactionId: { $in: txnIds },
+      status: "APPROVED",
+    })
+      .select("amount transactionId")
+      .lean();
+
+    const refundedAmount = approvedRefunds.reduce(
+      (sum, r) => sum + (Number(r.amount) || 0),
+      0
+    );
+    const totalVolume = Math.max(0, grossVolume - refundedAmount);
 
     const totalCount = all.length;
     const successRatePct =

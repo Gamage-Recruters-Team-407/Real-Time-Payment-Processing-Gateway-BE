@@ -16,6 +16,7 @@ import settingsRoutes from "./routes/settingsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import userPaymentHistoryRoutes from "./routes/userPaymentHistoryRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js"; 
 
 dotenv.config({ path: "./.env" });
 
@@ -30,7 +31,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // Increased limit for live polling
+  max: 5000,
   validate: { trustProxy: false },
 });
 app.use(limiter);
@@ -39,7 +40,7 @@ app.get("/", (req, res) => {
   res.send("Backend is running...");
 });
 
-// Routes
+// Routes -  admin routes  register
 app.use("/api/fraud", fraudRoutes);
 app.use("/api/otp", otpRoutes);
 app.use("/api/auth", authRoutes);
@@ -50,6 +51,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/user-payment-history", userPaymentHistoryRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes); 
 
 const PORT = process.env.PORT || 5000;
 
@@ -63,7 +65,6 @@ const startServer = async () => {
     
     httpServer.listen(PORT, async () => {
       console.log(`Server running on port ${PORT}`);
-      // Ping the ML microservice on startup to show success message
       await mlClient.verifyConnection();
     });
   } catch (error) {

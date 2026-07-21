@@ -37,6 +37,7 @@ export const createPayment = async (req, res) => {
       cardDetails,
       deviceId,
       ipAddress,
+      status,
     } = req.body;
 
     const numericAmount = Number(amount);
@@ -70,6 +71,11 @@ export const createPayment = async (req, res) => {
       });
     }
 
+    // Normalize and validate status if provided
+    const normalizedStatus = status
+      ? String(status).trim().toUpperCase()
+      : undefined;
+
     let payment;
 
     if (cardDetails) {
@@ -81,6 +87,7 @@ export const createPayment = async (req, res) => {
         amount: numericAmount,
         paymentId,
         description: String(description).trim(),
+        status: normalizedStatus,
         cardDetails: {
           cardholderName: cardDetails.cardholderName,
           cardNumber: cardDetails.cardNumber,
@@ -112,33 +119,33 @@ export const createPayment = async (req, res) => {
       });
     }
 
-      // INTEGRATE WITH FRAUD SYSTEM
-      try {
-        const userId = req.user?._id || req.user?.id || "USER-DEFAULT";
-        // The merchant name is not explicitly passed by standard payment, so we use description or a generic name.
-        const merchantName = description ? description : "System Merchant";
-        
-        const fraudResult = await fraudService.processTransaction({
-          transactionId: payment.transactionId || payment.paymentId,
-          userId: userId.toString(),
-          amount: numericAmount,
-          merchant: merchantName,
-          ip: ipAddress || req.ip || "Unknown",
-          deviceId: deviceId || "Unknown"
-        });
+    // INTEGRATE WITH FRAUD SYSTEM
+    try {
+      const userId = req.user?._id || req.user?.id || "USER-DEFAULT";
+      // The merchant name is not explicitly passed by standard payment, so we use description or a generic name.
+      const merchantName = description ? description : "System Merchant";
 
-        // ENFORCE FRAUD BLOCK
-        if (fraudResult && fraudResult.status === 'BLOCKED') {
-          await updatePaymentStatusInService(payment.paymentId, { status: "FAILED" });
-          return res.status(403).json({
-            success: false,
-            message: "Transaction blocked by fraud engine due to high risk.",
-            fraudStatus: "BLOCKED"
-          });
-        }
-      } catch (fraudErr) {
-        console.error("Failed to process transaction through Fraud System:", fraudErr);
+      const fraudResult = await fraudService.processTransaction({
+        transactionId: payment.transactionId || payment.paymentId,
+        userId: userId.toString(),
+        amount: numericAmount,
+        merchant: merchantName,
+        ip: ipAddress || req.ip || "Unknown",
+        deviceId: deviceId || "Unknown"
+      });
+
+      // ENFORCE FRAUD BLOCK
+      if (fraudResult && fraudResult.status === 'BLOCKED') {
+        await updatePaymentStatusInService(payment.paymentId, { status: "FAILED" });
+        return res.status(403).json({
+          success: false,
+          message: "Transaction blocked by fraud engine due to high risk.",
+          fraudStatus: "BLOCKED"
+        });
       }
+    } catch (fraudErr) {
+      console.error("Failed to process transaction through Fraud System:", fraudErr);
+    }
 
     return res.status(201).json({
       success: true,

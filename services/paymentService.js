@@ -170,14 +170,23 @@ export async function processCardPayment(paymentData) {
             console.log("\n============================================\n[TEST LOG] Card Payment processed:\n", payment, "\n============================================\n");
 
             if (userId) {
-                createNotification({
-                    userId,
-                    type: "payment_success",
-                    title: "Payment received",
-                    message: `LKR ${Number(amount).toLocaleString("en-LK")} was successfully processed. Card ending ${lastFour}.`,
-                    actionLabel: "View receipt",
-                    link: `/payment-history`,
-                }).catch((err) => console.error("Failed to create payment_success notification:", err.message));
+                if (payment.status === 'COMPLETED') {
+                    createNotification({
+                        userId,
+                        type: "payment_success",
+                        title: "Payment received",
+                        message: `LKR ${Number(amount).toLocaleString("en-LK")} was successfully processed. Card ending ${lastFour}.`,
+                        actionLabel: "View receipt",
+                        link: `/payment-history`,
+                    }).catch((err) => console.error("Failed to create payment_success notification:", err.message));
+                } else if (payment.status === 'FAILED') {
+                    createNotification({
+                        userId,
+                        type: "payment_failed",
+                        title: "Payment failed",
+                        message: `Payment of LKR ${Number(amount).toLocaleString("en-LK")} was not completed. Card ending ${lastFour}.`,
+                    }).catch((err) => console.error("Failed to create payment_failed notification:", err.message));
+                }
             }
 
             return {

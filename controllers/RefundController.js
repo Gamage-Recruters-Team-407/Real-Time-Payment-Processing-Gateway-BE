@@ -26,6 +26,10 @@ export const createRefund = async (req, res) => {
             amount = txn ? txn.amount : 0;
         }
 
+        const itemPhoto = req.file
+            ? (req.file.path || req.file.secure_url)
+            : req.body.itemPhoto;
+
         if (
             !name ||
             !transactionId ||
@@ -33,11 +37,11 @@ export const createRefund = async (req, res) => {
             amount === undefined ||
             amount === null ||
             !reason ||
-            !req.file
+            !itemPhoto
         ) {
             return res.status(400).json({
                 success: false,
-                message: "All fields are required.",
+                message: "All fields are required (including item photo).",
             });
         }
 
@@ -48,7 +52,7 @@ export const createRefund = async (req, res) => {
             phone: String(phone).trim(),
             amount: Number(amount),
             reason: String(reason).trim(),
-            itemPhoto: req.file.path,
+            itemPhoto: String(itemPhoto).trim(),
         });
 
         res.status(201).json({

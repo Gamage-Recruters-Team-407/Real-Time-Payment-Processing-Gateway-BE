@@ -1,31 +1,23 @@
-import React, { useContext } from "react";
-import { Navigate, useLocation } from "react-router-dom";
-import { AuthContext } from "../context/AuthContext"; // Dev 13
+import { Router } from "express";
+import {
+  getDashboardOverview,
+  getTransactionTrend,
+  getRecentActivity,
+  getSystemHealth,
+  getTransactionStatusDistribution,
+} from "../controllers/AdminController.js";
 
-export default function AdminRoute({ children }) {
-  const { user, isAuthenticated, loading } = useContext(AuthContext);
-  const location = useLocation();
+const router = Router();
 
-  // While auth state is still resolving (e.g. checking token on refresh)
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-slate-400">Checking access...</p>
-      </div>
-    );
-  }
+// Test route
+router.get("/test", (req, res) => {
+  res.json({ message: "Admin routes are working!" });
+});
 
-  // Not logged in at all -> send to login, remember where they wanted to go
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+router.get("/dashboard/overview", getDashboardOverview);
+router.get("/dashboard/transaction-trend", getTransactionTrend);
+router.get("/dashboard/recent-activity", getRecentActivity);
+router.get("/dashboard/system-health", getSystemHealth);
+router.get("/dashboard/status-distribution", getTransactionStatusDistribution);
 
-  // Logged in but not an administrator -> block access
-  const allowedRoles = ["System Administrator", "Admin", "admin"];
-  if (!user || !allowedRoles.includes(user.role)) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
-  // Verified administrator -> render the protected admin page
-  return children;
-}
+export default router;

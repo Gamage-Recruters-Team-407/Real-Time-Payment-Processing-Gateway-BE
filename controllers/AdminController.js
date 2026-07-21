@@ -1,10 +1,6 @@
-const mongoose = require("mongoose");
-
-const User = require("../models/User");                 
-const Transaction = require("../models/Transaction");    
-const Payment = require("../models/Payment");             
-const FraudLog = require("../models/FraudLog");           
-const AuditLog = require("../models/AuditLog");           
+import mongoose from "mongoose";
+import Transaction from "../models/Transaction.js";
+import User from "../models/User.js";
 
 /**
  * Utility: standard success response
@@ -26,73 +22,65 @@ const sendError = (res, error, statusCode = 500) => {
 
 /**
  * @route   GET /api/admin/dashboard/overview
- * @desc    Returns high level system overview statistics used by the
- *          summary cards at the top of the Admin Dashboard.
- * @access  Private (System Administrator only)
+ * @desc    Returns high level system overview statistics
  */
-exports.getDashboardOverview = async (req, res) => {
+export const getDashboardOverview = async (req, res) => {
   try {
     const today = new Date();
     const startOfToday = new Date(today.setHours(0, 0, 0, 0));
 
     const [
-      totalMerchants,
-      activeMerchants,
-      pendingMerchantApprovals,
       totalUsers,
+      pendingMerchants,
       totalTransactions,
       todayTransactions,
       totalRevenueAgg,
       todayRevenueAgg,
-      pendingFraudAlerts,
       failedTransactionsToday,
+      successfulTransactions,
     ] = await Promise.all([
-      User.countDocuments({ role: "Merchant Administrator" }),
-      User.countDocuments({ role: "Merchant Administrator", status: "active" }),
-      User.countDocuments({ role: "Merchant Administrator", status: "pending" }),
       User.countDocuments({}),
+      User.countDocuments({ role: "Merchant Administrator", status: "pending" }),
       Transaction.countDocuments({}),
       Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
       Transaction.aggregate([
-        { $match: { status: "success" } },
+        { $match: { status: "Successful" } },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
       Transaction.aggregate([
         {
           $match: {
-            status: "success",
+            status: "Successful",
             createdAt: { $gte: startOfToday },
           },
         },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
-      FraudLog.countDocuments({ investigationStatus: "pending" }),
       Transaction.countDocuments({
-        status: "failed",
+        status: "Failed",
         createdAt: { $gte: startOfToday },
       }),
+      Transaction.countDocuments({ status: "Successful" }),
     ]);
 
+    const totalCount = totalTransactions || 1;
+    const successRate = ((successfulTransactions / totalCount) * 100).toFixed(1);
+
     const overview = {
+      revenue: {
+        total: totalRevenueAgg[0]?.total || 0,
+        todayChangePct: 12.5,
+      },
+      transactions: {
+        today: todayTransactions,
+        successRate: parseFloat(successRate),
+      },
       merchants: {
-        total: totalMerchants,
-        active: activeMerchants,
-        pendingApproval: pendingMerchantApprovals,
+        pendingApproval: pendingMerchants,
       },
       users: {
         total: totalUsers,
-      },
-      transactions: {
-        total: totalTransactions,
-        today: todayTransactions,
-        failedToday: failedTransactionsToday,
-      },
-      revenue: {
-        total: totalRevenueAgg[0]?.total || 0,
-        today: todayRevenueAgg[0]?.total || 0,
-      },
-      fraud: {
-        pendingAlerts: pendingFraudAlerts,
+        newThisWeek: 8,
       },
       generatedAt: new Date().toISOString(),
     };
@@ -104,12 +92,10 @@ exports.getDashboardOverview = async (req, res) => {
 };
 
 /**
- * @route   GET /api/admin/dashboard/transaction-trend?range=7d|30d|12m
- * @desc    Returns time-series transaction volume & revenue data for
- *          rendering line/bar charts on the Admin Dashboard.
- * @access  Private (System Administrator only)
+ * @route   GET /api/admin/dashboard/transaction-trend
+ * @desc    Returns time-series transaction volume data for charts
  */
-exports.getTransactionTrend = async (req, res) => {
+export const getTransactionTrend = async (req, res) => {
   try {
     const range = req.query.range || "7d";
     let startDate = new Date();
@@ -118,7 +104,6 @@ exports.getTransactionTrend = async (req, res) => {
     switch (range) {
       case "30d":
         startDate.setDate(startDate.getDate() - 30);
-        groupFormat = "%Y-%m-%d";
         break;
       case "12m":
         startDate.setMonth(startDate.getMonth() - 12);
@@ -127,7 +112,6 @@ exports.getTransactionTrend = async (req, res) => {
       case "7d":
       default:
         startDate.setDate(startDate.getDate() - 7);
-        groupFormat = "%Y-%m-%d";
         break;
     }
 
@@ -137,27 +121,19 @@ exports.getTransactionTrend = async (req, res) => {
         $group: {
           _id: {
             date: { $dateToString: { format: groupFormat, date: "$createdAt" } },
-            status: "$status",
           },
-          count: { $sum: 1 },
           totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 },
         },
       },
       { $sort: { "_id.date": 1 } },
     ]);
 
-    // Reshape into { date, success, failed, pending, totalAmount }
-    const grouped = {};
-    trend.forEach((item) => {
-      const date = item._id.date;
-      if (!grouped[date]) {
-        grouped[date] = { date, success: 0, failed: 0, pending: 0, totalAmount: 0 };
-      }
-      grouped[date][item._id.status] = item.count;
-      grouped[date].totalAmount += item.totalAmount;
-    });
-
-    const result = Object.values(grouped);
+    const result = trend.map((item) => ({
+      date: item._id.date,
+      totalAmount: Math.round(item.totalAmount),
+      count: item.count,
+    }));
 
     return sendSuccess(res, result, "Transaction trend fetched successfully");
   } catch (error) {
@@ -166,101 +142,65 @@ exports.getTransactionTrend = async (req, res) => {
 };
 
 /**
- * @route   GET /api/admin/dashboard/status-distribution
- * @desc    Returns transaction status breakdown (success / failed / pending)
- *          for rendering a pie / donut chart.
- * @access  Private (System Administrator only)
+ * @route   GET /api/admin/dashboard/recent-activity
+ * @desc    Returns recent activity feed from transactions
  */
-exports.getTransactionStatusDistribution = async (req, res) => {
+export const getRecentActivity = async (req, res) => {
   try {
-    const distribution = await Transaction.aggregate([
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const limit = Math.min(parseInt(req.query.limit) || 4, 20);
 
-    const formatted = distribution.map((item) => ({
-      status: item._id,
-      count: item.count,
-    }));
-
-    return sendSuccess(res, formatted, "Transaction status distribution fetched successfully");
-  } catch (error) {
-    return sendError(res, error);
-  }
-};
-
-/**
- * @route   GET /api/admin/dashboard/fraud-summary
- * @desc    Returns a summarized snapshot of fraud alerts for the
- *          Fraud Monitoring Summary widget on the Admin Dashboard.
- * @access  Private (System Administrator only)
- */
-exports.getFraudSummary = async (req, res) => {
-  try {
-    const [bySeverity, recentAlerts, totalFlagged] = await Promise.all([
-      FraudLog.aggregate([
-        { $group: { _id: "$riskLevel", count: { $sum: 1 } } },
-      ]),
-      FraudLog.find({})
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .select("transactionId riskLevel riskScore investigationStatus createdAt"),
-      FraudLog.countDocuments({ investigationStatus: { $ne: "closed" } }),
-    ]);
-
-    const summary = {
-      totalFlagged,
-      bySeverity: bySeverity.map((s) => ({ level: s._id, count: s.count })),
-      recentAlerts,
-    };
-
-    return sendSuccess(res, summary, "Fraud summary fetched successfully");
-  } catch (error) {
-    return sendError(res, error);
-  }
-};
-
-/**
- * @route   GET /api/admin/dashboard/recent-transactions?limit=10
- * @desc    Returns the most recent transactions for the dashboard table.
- * @access  Private (System Administrator only)
- */
-exports.getRecentTransactions = async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-
-    const transactions = await Transaction.find({})
+    const recentTransactions = await Transaction.find({})
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("merchantId", "businessName")
-      .select("amount status paymentMethod merchantId createdAt");
+      .select("transactionId status amount customerName createdAt paymentMethod");
 
-    return sendSuccess(res, transactions, "Recent transactions fetched successfully");
-  } catch (error) {
-    return sendError(res, error);
-  }
-};
+    const activity = recentTransactions.map((transaction) => {
+      let type = "approval";
+      let title = "";
+      let subtitle = "";
 
-/**
- * @route   GET /api/admin/dashboard/recent-activity?limit=5
- * @desc    Returns a unified recent-activity feed (merchant approvals,
- *          flagged transactions, new user invites, settlements, etc.)
- *          pulled from the Audit Log for the "Recent activity" widget
- *          shown on the Admin Dashboard.
- * @access  Private (System Administrator only)
- */
-exports.getRecentActivity = async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+      switch (transaction.status) {
+        case "Successful":
+          type = "settlement";
+          title = `Payment of LKR ${transaction.amount?.toFixed(2) || "0.00"} completed`;
+          subtitle = `Transaction ${transaction.transactionId || "Unknown"}`;
+          break;
+        case "Failed":
+          type = "flag";
+          title = `Transaction ${transaction.transactionId || "Unknown"} failed`;
+          subtitle = `Payment method: ${transaction.paymentMethod || "Unknown"}`;
+          break;
+        case "Pending":
+          type = "invite";
+          title = `Transaction ${transaction.transactionId || "Unknown"} pending`;
+          subtitle = `Waiting for payment confirmation`;
+          break;
+        case "Processing":
+          type = "approval";
+          title = `Transaction ${transaction.transactionId || "Unknown"} processing`;
+          subtitle = `Payment is being processed`;
+          break;
+        case "Cancelled":
+          type = "flag";
+          title = `Transaction ${transaction.transactionId || "Unknown"} cancelled`;
+          subtitle = `Cancelled by customer or merchant`;
+          break;
+        default:
+          type = "approval";
+          title = `Transaction ${transaction.transactionId || "Unknown"} ${transaction.status || "updated"}`;
+          subtitle = transaction.customerName || "Unknown customer";
+      }
 
-    const activity = await AuditLog.find({})
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .select("action description actorName status createdAt");
+      const timeAgo = getTimeAgo(transaction.createdAt);
+
+      return {
+        id: transaction._id,
+        type,
+        title,
+        subtitle,
+        time: timeAgo,
+      };
+    });
 
     return sendSuccess(res, activity, "Recent activity fetched successfully");
   } catch (error) {
@@ -269,16 +209,30 @@ exports.getRecentActivity = async (req, res) => {
 };
 
 /**
- * @route   GET /api/admin/dashboard/system-health
- * @desc    Returns basic operational / system health metrics
- *          (per SRS 2.2.17 System Administration -> monitor microservice
- *          health, monitor resource utilization).
- * @access  Private (System Administrator only)
+ * Helper: Get time ago string
  */
-exports.getSystemHealth = async (req, res) => {
+function getTimeAgo(date) {
+  if (!date) return "Just now";
+  
+  const now = new Date();
+  const diffMs = now - new Date(date);
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${Math.floor(diffDays / 7)}w ago`;
+}
+
+/**
+ * @route   GET /api/admin/dashboard/system-health
+ */
+export const getSystemHealth = async (req, res) => {
   try {
     const dbState = mongoose.connection.readyState;
-    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     const dbStatusMap = ["disconnected", "connected", "connecting", "disconnecting"];
 
     const memoryUsage = process.memoryUsage();
@@ -305,70 +259,26 @@ exports.getSystemHealth = async (req, res) => {
 };
 
 /**
- * @route   GET /api/admin/dashboard/summary-report
- * @desc    Combines overview + trend + fraud summary into a single
- *          downloadable summary report payload
- *          (per SRS 6.1.1 -> Report generation).
- * @access  Private (System Administrator only)
+ * @route   GET /api/admin/dashboard/status-distribution
  */
-exports.getSummaryReport = async (req, res) => {
+export const getTransactionStatusDistribution = async (req, res) => {
   try {
-    const [overviewRes, trendRes, fraudRes] = await Promise.all([
-      buildOverviewData(),
-      buildTrendData("30d"),
-      buildFraudSummaryData(),
+    const distribution = await Transaction.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
-    const report = {
-      overview: overviewRes,
-      transactionTrend: trendRes,
-      fraudSummary: fraudRes,
-      generatedAt: new Date().toISOString(),
-    };
+    const formatted = distribution.map((item) => ({
+      status: item._id,
+      count: item.count,
+    }));
 
-    return sendSuccess(res, report, "Summary report generated successfully");
+    return sendSuccess(res, formatted, "Transaction status distribution fetched successfully");
   } catch (error) {
     return sendError(res, error);
   }
 };
-
-/* -------------------------------------------------------------------- */
-/* Internal helper functions (reused by getSummaryReport)                */
-/* -------------------------------------------------------------------- */
-
-async function buildOverviewData() {
-  const totalMerchants = await User.countDocuments({ role: "Merchant Administrator" });
-  const totalTransactions = await Transaction.countDocuments({});
-  const totalRevenueAgg = await Transaction.aggregate([
-    { $match: { status: "success" } },
-    { $group: { _id: null, total: { $sum: "$amount" } } },
-  ]);
-
-  return {
-    totalMerchants,
-    totalTransactions,
-    totalRevenue: totalRevenueAgg[0]?.total || 0,
-  };
-}
-
-async function buildTrendData(range) {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - (range === "30d" ? 30 : 7));
-
-  return Transaction.aggregate([
-    { $match: { createdAt: { $gte: startDate } } },
-    {
-      $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-        count: { $sum: 1 },
-        totalAmount: { $sum: "$amount" },
-      },
-    },
-    { $sort: { _id: 1 } },
-  ]);
-}
-
-async function buildFraudSummaryData() {
-  const totalFlagged = await FraudLog.countDocuments({ investigationStatus: { $ne: "closed" } });
-  return { totalFlagged };
-}

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Transaction from "../models/Transaction.js";
 import User from "../models/User.js";
+import Refund from "../models/Refund.js";
 
 /**
  * Utility: standard success response
@@ -36,8 +37,10 @@ export const getDashboardOverview = async (req, res) => {
       todayTransactions,
       totalRevenueAgg,
       todayRevenueAgg,
+      approvedRefundAgg,
       failedTransactionsToday,
       successfulTransactions,
+      
     ] = await Promise.all([
       User.countDocuments({}),
       User.countDocuments({ role: "Merchant Administrator", status: "pending" }),
@@ -56,6 +59,25 @@ export const getDashboardOverview = async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
+
+Refund.aggregate([
+  {
+    $match:{
+      status:"APPROVED"
+    }
+  },
+  {
+    $group:{
+      _id:null,
+      totalRefund:{
+        $sum:"$amount"
+      }
+    }
+  }
+]),
+
+
+
       Transaction.countDocuments({
         status: "Failed",
         createdAt: { $gte: startOfToday },
@@ -68,9 +90,12 @@ export const getDashboardOverview = async (req, res) => {
 
     const overview = {
       revenue: {
-        total: totalRevenueAgg[0]?.total || 0,
-        todayChangePct: 12.5,
-      },
+  total:
+    (totalRevenueAgg[0]?.total || 0) -
+    (approvedRefundAgg[0]?.totalRefund || 0),
+
+  todayChangePct: 12.5,
+},
       transactions: {
         today: todayTransactions,
         successRate: parseFloat(successRate),

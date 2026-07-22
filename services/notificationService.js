@@ -1,4 +1,5 @@
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
 
 /**
  * Turns a "Today / Yesterday / This Week / Earlier" bucket + a human-readable
@@ -49,10 +50,9 @@ function formatNotification(doc) {
 }
 
 /**
- * Creates a notification for a user. Other modules (Payment, Settlement,
- * OTP, Fraud) should import and call this directly instead of hitting the
- * HTTP route, e.g.:
- *   import { createNotification } from "../services/notificationService.js";
+ * Creates a notification for a user. Other modules (Payment, OTP, Fraud)
+ * should import and call this directly instead of hitting the HTTP route:
+ *   import { createNotification } from "./notificationService.js";
  *   await createNotification({ userId, type: "payment_success", title, message });
  */
 export const createNotification = async ({
@@ -102,4 +102,31 @@ export const markAllAsRead = async (userId) => {
 
 export const deleteNotification = async (userId, notificationId) => {
   return Notification.findOneAndDelete({ _id: notificationId, userId });
+};
+
+/**
+ * Sends the same notification to every admin user. Used for events other
+ * modules want admins to see regardless of which customer triggered them
+ * (e.g. "a payment was completed", "a transaction was blocked").
+ */
+export const notifyAdmins = async ({ title, message, type = "system", actionLabel, link }) => {
+  const admins = await User.find({ role: { $in: ["Admin", "admin"] } }).select("_id");
+
+  if (!admins.length) {
+    console.warn("notifyAdmins: no admin users found — nobody was notified.");
+    return [];
+  }
+
+  return Promise.all(
+    admins.map((admin) =>
+      createNotification({
+        userId: admin._id,
+        title,
+        message,
+        type,
+        actionLabel,
+        link,
+      })
+    )
+  );
 };

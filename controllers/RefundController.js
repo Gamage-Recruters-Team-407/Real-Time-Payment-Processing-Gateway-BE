@@ -44,10 +44,8 @@ export const createRefund = async (req, res) => {
             amount = txn ? txn.amount : 0;
         }
 
-        // Validate all fields including file
-        const itemPhoto = req.file
-            ? (req.file.path || req.file.secure_url)
-            : req.body.itemPhoto;
+        // Validate all fields including file presence
+        const filePresent = req.file || req.body.itemPhoto;
 
         if (
             !name ||
@@ -56,7 +54,7 @@ export const createRefund = async (req, res) => {
             amount === undefined ||
             amount === null ||
             !reason ||
-            !itemPhoto
+            !filePresent
         ) {
             return res.status(400).json({
                 success: false,
@@ -65,19 +63,21 @@ export const createRefund = async (req, res) => {
         }
 
         // ---------- Upload image to Cloudinary ----------
-        let itemPhotoUrl;
-        try {
-            const result = await uploadImageToCloudinary(
-                req.file.buffer,
-                req.file.mimetype
-            );
-            itemPhotoUrl = result.secure_url;   // Cloudinary URL
-        } catch (uploadError) {
-            console.error("Cloudinary upload failed:", uploadError.message);
-            return res.status(500).json({
-                success: false,
-                message: "Image upload failed. Please try again.",
-            });
+        let itemPhotoUrl = req.body.itemPhoto;
+        if (req.file) {
+            try {
+                const result = await uploadImageToCloudinary(
+                    req.file.buffer,
+                    req.file.mimetype
+                );
+                itemPhotoUrl = result.secure_url;   // Cloudinary URL
+            } catch (uploadError) {
+                console.error("Cloudinary upload failed:", uploadError.message);
+                return res.status(500).json({
+                    success: false,
+                    message: "Image upload failed. Please try again.",
+                });
+            }
         }
 
         // Create refund with Cloudinary URL
@@ -88,7 +88,7 @@ export const createRefund = async (req, res) => {
             phone: String(phone).trim(),
             amount: Number(amount),
             reason: String(reason).trim(),
-            itemPhoto: String(itemPhoto).trim(),
+            itemPhoto: String(itemPhotoUrl).trim(),
         });
 
         res.status(201).json({

@@ -24,8 +24,6 @@ import userPaymentHistoryRoutes from "./routes/userPaymentHistoryRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js"; 
 
-import dns from "dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
 dotenv.config({ path: "./.env" });
 
 const app = express();

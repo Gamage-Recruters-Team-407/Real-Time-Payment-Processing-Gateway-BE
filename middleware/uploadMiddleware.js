@@ -1,43 +1,20 @@
-import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
+import multer from 'multer';
+import path from 'path';
 
-let storage;
-try {
-    storage = new CloudinaryStorage({
-        cloudinary,
-        params: {
-            folder: "refund-images",
-            allowed_formats: ["jpg", "png", "jpeg"],
-        },
-    });
-} catch (err) {
-    storage = multer.memoryStorage();
-}
+const storage = multer.memoryStorage();
 
-const multerUpload = multer({ storage });
-
-const upload = {
-    single: (fieldName) => (req, res, next) => {
-        const contentType = req.headers["content-type"] || "";
-        if (!contentType.includes("multipart/form-data")) {
-            return next();
-        }
-
-        multerUpload.single(fieldName)(req, res, (err) => {
-            if (err) {
-                console.error("Multer upload error:", err);
-                if (req.body && req.body.itemPhoto) {
-                    return next();
-                }
-                return res.status(400).json({
-                    success: false,
-                    message: `Image upload failed: ${err.message}`,
-                });
-            }
-            next();
-        });
-    },
+const fileFilter = (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error('Only images are allowed'));
 };
 
-export default upload;
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter,
+});
+
+export default upload;

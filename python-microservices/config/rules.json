@@ -1,7 +1,7 @@
 {
     "rules": {
         "velocity": {"enabled": true, "threshold": 5, "points": 25},
-        "amount": {"enabled": true, "threshold": 5000, "points": 20},
+        "amount": {"enabled": true, "threshold": 1500000, "points": 20},
         "geographic": {"enabled": true, "points": 20},
         "device": {"enabled": true, "points": 20},
         "merchant": {"enabled": true, "risk_threshold": 80, "points": 15},

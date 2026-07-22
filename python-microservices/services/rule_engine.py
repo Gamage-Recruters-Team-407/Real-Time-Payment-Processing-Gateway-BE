@@ -23,9 +23,9 @@ class RuleEngine:
         amount_cfg = self.rules.get("amount", {})
         if amount_cfg.get("enabled"):
             amount = transaction.get("amount", 0)
-            if amount > amount_cfg.get("threshold", 5000):
+            if amount > amount_cfg.get("threshold", 1500000):
                 score += amount_cfg.get("points", 20)
-                reasons.append(f"High transaction amount: ${amount}")
+                reasons.append(f"High transaction amount: Rs. {amount}")
 
         # Rule 3: Geographic
         geo_cfg = self.rules.get("geographic", {})

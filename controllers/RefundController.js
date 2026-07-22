@@ -7,6 +7,18 @@ import { Readable } from "stream";                  // for buffer → stream
 // ---------- Helper: upload buffer to Cloudinary ----------
 const uploadImageToCloudinary = (buffer, mimetype) => {
     return new Promise((resolve, reject) => {
+        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+        const apiKey = process.env.CLOUDINARY_API_KEY;
+        const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+        if (!cloudName || !apiKey || !apiSecret) {
+            return reject(
+                new Error(
+                    "Cloudinary credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) are missing or incomplete in environment."
+                )
+            );
+        }
+
         const uploadStream = cloudinary.uploader.upload_stream(
             { folder: "refund_photos" },   // optional folder name
             (error, result) => {
@@ -31,7 +43,7 @@ const generateRefundId = () => {
     return `REF-${year}${month}${day}-${random}`;
 };
 
-// ---------- CREATE REFUND (with Cloudinary upload) ----------
+// ---------- CREATE REFUND (with Cloudinary upload & fallback) ----------
 export const createRefund = async (req, res) => {
     try {
         let { name, transactionId, phone, amount, reason } = req.body;
@@ -62,7 +74,7 @@ export const createRefund = async (req, res) => {
             });
         }
 
-        // ---------- Upload image to Cloudinary ----------
+        // ---------- Upload image to Cloudinary (or Base64 fallback) ----------
         let itemPhotoUrl = req.body.itemPhoto;
         if (req.file) {
             try {
@@ -72,11 +84,9 @@ export const createRefund = async (req, res) => {
                 );
                 itemPhotoUrl = result.secure_url;   // Cloudinary URL
             } catch (uploadError) {
-                console.error("Cloudinary upload failed:", uploadError.message);
-                return res.status(500).json({
-                    success: false,
-                    message: "Image upload failed. Please try again.",
-                });
+                console.warn("⚠️ Cloudinary upload skipped/failed:", uploadError.message);
+                console.log("ℹ️ Storing image using Base64 Data URL fallback.");
+                itemPhotoUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
             }
         }
 

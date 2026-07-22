@@ -134,13 +134,13 @@ export const createPayment = async (req, res) => {
         deviceId: deviceId || "Unknown"
       });
 
-      // ENFORCE FRAUD BLOCK
       if (fraudResult && fraudResult.status === 'BLOCKED') {
-        await updatePaymentStatusInService(payment.paymentId, { status: "FAILED" });
+        const failedPayment = await updatePaymentStatusInService(payment.paymentId, { status: "FAILED" });
         return res.status(403).json({
           success: false,
           message: "Transaction blocked by fraud engine due to high risk.",
-          fraudStatus: "BLOCKED"
+          fraudStatus: "BLOCKED",
+          data: failedPayment
         });
       }
     } catch (fraudErr) {

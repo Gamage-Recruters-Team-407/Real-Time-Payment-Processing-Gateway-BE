@@ -28,7 +28,10 @@ const fraudLogSchema = new mongoose.Schema({
     notes: { type: String },
     timeline: { type: Array, default: [] }
   },
-  whitelisted: { type: Boolean, default: false }
+  whitelisted: { type: Boolean, default: false },
+  location: { type: String },
+  lat: { type: Number },
+  lon: { type: Number }
 }, {
   timestamps: true // Adds createdAt and updatedAt
 });

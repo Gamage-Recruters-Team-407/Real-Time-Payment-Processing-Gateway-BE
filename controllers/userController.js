@@ -1,11 +1,12 @@
 import * as userService from '../services/userService.js';
 import { validationResult } from 'express-validator';
+import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 import {
   findUserById,
   getDashboardStats,
   updateUserProfile,
 } from "../services/userService.js";
-
 
 // -----------------------------------------------------------------------
 // GET /api/users/me
@@ -166,10 +167,31 @@ export const removeUser = async (req, res) => {
   }
 };
 
+export const getMerchantByName = async (req, res) => {
+  try {
+    const { name } = req.params;
+    if (!name) {
+      return res.status(400).json({ error: 'Merchant name is required' });
+    }
+
+    const merchant = await User.findOne({ name });
+    
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant not found' });
+    }
+
+    res.json(merchant);
+  } catch (error) {
+    console.error('Error fetching merchant profile:', error);
+    res.status(500).json({ error: 'Failed to fetch merchant profile' });
+  }
+};
+
 export default {
   createUser,
   listUsers,
   getUser,
   updateUser,
   removeUser,
+  getMerchantByName,
 };

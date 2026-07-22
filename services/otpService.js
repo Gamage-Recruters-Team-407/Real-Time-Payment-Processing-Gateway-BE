@@ -20,14 +20,14 @@ const createTransporter = () => {
 
 const sendOTPEmail = async (email, otp) => {
     const EMAIL_CONFIG = getEmailConfig();
-    
+
     if (!EMAIL_CONFIG.USER || !EMAIL_CONFIG.PASS) {
         console.log(`\n[TESTING MODE] OTP for ${email} is: ${otp}\n`);
         return;
     }
 
     const transporter = createTransporter();
-    
+
     const mailOptions = {
         from: `"GamagePay" <${EMAIL_CONFIG.USER}>`,
         to: email,
@@ -51,7 +51,21 @@ const sendOTPEmail = async (email, otp) => {
     }
 };
 
-// ️ 1. OTP Generation (now works using either a User ID or an email address)
+/**
+ * Notifies the user that their payment did not complete because OTP
+ * verification wasn't finished — whether they entered the wrong code too
+ * many times, took too long, or simply closed the app without trying.
+ */
+function notifyPaymentIncomplete(userId, reason) {
+    createNotification({
+        userId,
+        type: "payment_failed",
+        title: "Payment incomplete",
+        message: `Your payment could not be completed — ${reason}`,
+    }).catch((err) => console.error("Failed to create payment_incomplete notification:", err.message));
+}
+
+// 1. OTP Generation (works using either a User ID or an email address)
 export const generateOTPService = async (userId, email) => {
     let finalUserId = userId;
     let finalEmail = email;
@@ -60,11 +74,9 @@ export const generateOTPService = async (userId, email) => {
     if (!finalUserId && finalEmail) {
         const user = await User.findOne({ email: finalEmail });
         if (!user) {
-            // For security reasons, it doesn't explicitly say "User not found."
-            // But let's simply trigger an error for this project.
             throw new Error("This email is not associated with any user.");
         }
-        finalUserId = user._id.toString(); // retrieving the userId from the database.
+        finalUserId = user._id.toString();
     }
 
     // Scenario 2: Payment (only userId available; no email)
@@ -73,20 +85,31 @@ export const generateOTPService = async (userId, email) => {
         if (!user) {
             throw new Error("User not found.");
         }
-        finalEmail = user.email; // retrieving the email from the database
+        finalEmail = user.email;
     }
 
-    // Now we have both finalUserId and finalEmail.
     if (!finalUserId || !finalEmail) {
         throw new Error("A userId or email is required.");
     }
 
     const otp = generateRandomOTP();
     const expiresAt = getExpiryDate();
-    const key = finalUserId; // The userId is used as the key.
+    const key = finalUserId;
 
     saveOTP(key, otp, expiresAt);
-    await sendOTPEmail(finalEmail, otp);
+
+    try {
+        await sendOTPEmail(finalEmail, otp);
+    } catch (err) {
+        // The OTP is useless if it was never actually sent — clean it up and
+        // let the user know the payment couldn't go any further because of this.
+        deleteOTP(key);
+        notifyPaymentIncomplete(
+            finalUserId,
+            "we couldn't send the OTP code needed to complete this payment. Please try again."
+        );
+        throw err;
+    }
 
     createNotification({
         userId: finalUserId,
@@ -94,6 +117,22 @@ export const generateOTPService = async (userId, email) => {
         title: "OTP verification required",
         message: `A one-time code was sent to ${finalEmail}. It expires in ${OTP_CONFIG.EXPIRY_MINUTES} minutes.`,
     }).catch((err) => console.error("Failed to create otp notification:", err.message));
+
+    // Passive watcher: if this OTP is STILL sitting in the store once it expires,
+    // it means nobody ever attempted to verify it (app closed, tab abandoned, etc.)
+    // — not just "wrong code" or "too slow at the verify screen", but never tried at all.
+    // verifyOTPService always deletes the record on success, expiry-check, or max-attempts,
+    // so if it's still here, the flow was genuinely abandoned.
+    setTimeout(() => {
+        const stillPending = getOTP(key);
+        if (stillPending) {
+            deleteOTP(key);
+            notifyPaymentIncomplete(
+                finalUserId,
+                "the OTP was never verified before it expired."
+            );
+        }
+    }, OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000 + 2000); // small buffer after expiry
 
     return { message: "OTP sent successfully", expiresAt };
 };
@@ -109,11 +148,13 @@ export const verifyOTPService = async (userId, otp) => {
 
     if (otpRecord.expiresAt < new Date()) {
         deleteOTP(key);
+        notifyPaymentIncomplete(userId, "the OTP code expired before it was verified.");
         throw new Error("OTP has expired. Please request a new one.");
     }
 
     if (otpRecord.attempts >= OTP_CONFIG.MAX_ATTEMPTS) {
         deleteOTP(key);
+        notifyPaymentIncomplete(userId, "too many incorrect OTP attempts.");
         throw new Error("Maximum attempts reached. Please request a new OTP.");
     }
 
@@ -133,7 +174,6 @@ export const verifyOTPService = async (userId, otp) => {
 
 // 3. OTP Resend (userId or email is required)
 export const resendOTPService = async (userId, email) => {
-    // For the resend operation as well, you first need to retrieve the userId and email.
     let finalUserId = userId;
     let finalEmail = email;
 

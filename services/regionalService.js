@@ -14,7 +14,9 @@ export const regionalService = {
           totalTransactions: { $sum: 1 },
           fraudTransactions: {
             $sum: { $cond: [{ $in: ["$status", ["HIGH_RISK", "BLOCKED", "ESCALATED"]] }, 1, 0] }
-          }
+          },
+          lat: { $first: "$lat" },
+          lon: { $first: "$lon" }
         }
       },
       {
@@ -22,6 +24,8 @@ export const regionalService = {
           name: "$_id",
           totalTransactions: 1,
           fraudTransactions: 1,
+          lat: 1,
+          lon: 1,
           fraudRate: { 
             $round: [{ $multiply: [{ $divide: ["$fraudTransactions", { $max: ["$totalTransactions", 1] }] }, 100] }, 1] 
           }
@@ -50,6 +54,8 @@ export const regionalService = {
           fraudRate: r.fraudRate,
           totalTransactions: r.totalTransactions,
           fraudTransactions: r.fraudTransactions,
+          lat: r.lat,
+          lon: r.lon,
           trend: "STABLE",
           change: "+0.0%"
         };

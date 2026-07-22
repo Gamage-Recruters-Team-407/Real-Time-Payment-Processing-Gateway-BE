@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Transaction from "../models/Transaction.js";
 import User from "../models/User.js";
+import Refund from "../models/Refund.js";
 
 /**
  * Utility: standard success response
@@ -36,8 +37,10 @@ export const getDashboardOverview = async (req, res) => {
       todayTransactions,
       totalRevenueAgg,
       todayRevenueAgg,
+      approvedRefundAgg,
       failedTransactionsToday,
       successfulTransactions,
+      
     ] = await Promise.all([
       User.countDocuments({}),
       User.countDocuments({ role: "Merchant Administrator", status: "pending" }),
@@ -56,6 +59,25 @@ export const getDashboardOverview = async (req, res) => {
         },
         { $group: { _id: null, total: { $sum: "$amount" } } },
       ]),
+
+Refund.aggregate([
+  {
+    $match:{
+      status:"APPROVED"
+    }
+  },
+  {
+    $group:{
+      _id:null,
+      totalRefund:{
+        $sum:"$amount"
+      }
+    }
+  }
+]),
+
+
+
       Transaction.countDocuments({
         status: "Failed",
         createdAt: { $gte: startOfToday },
@@ -68,9 +90,12 @@ export const getDashboardOverview = async (req, res) => {
 
     const overview = {
       revenue: {
-        total: totalRevenueAgg[0]?.total || 0,
-        todayChangePct: 12.5,
-      },
+  total:
+    (totalRevenueAgg[0]?.total || 0) -
+    (approvedRefundAgg[0]?.totalRefund || 0),
+
+  todayChangePct: 12.5,
+},
       transactions: {
         today: todayTransactions,
         successRate: parseFloat(successRate),
@@ -99,28 +124,36 @@ export const getTransactionTrend = async (req, res) => {
   try {
     const range = req.query.range || "7d";
     let startDate = new Date();
-    let groupFormat = "%Y-%m-%d";
-
+    const endDate = new Date();
+    
+    // Set start date based on range
     switch (range) {
       case "30d":
         startDate.setDate(startDate.getDate() - 30);
         break;
       case "12m":
         startDate.setMonth(startDate.getMonth() - 12);
-        groupFormat = "%Y-%m";
         break;
       case "7d":
       default:
         startDate.setDate(startDate.getDate() - 7);
         break;
     }
+    
+    // Reset time to start of day
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     const trend = await Transaction.aggregate([
-      { $match: { createdAt: { $gte: startDate } } },
+      { 
+        $match: { 
+          createdAt: { $gte: startDate, $lte: endDate } 
+        } 
+      },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: groupFormat, date: "$createdAt" } },
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           },
           totalAmount: { $sum: "$amount" },
           count: { $sum: 1 },
@@ -129,11 +162,31 @@ export const getTransactionTrend = async (req, res) => {
       { $sort: { "_id.date": 1 } },
     ]);
 
-    const result = trend.map((item) => ({
-      date: item._id.date,
-      totalAmount: Math.round(item.totalAmount),
-      count: item.count,
-    }));
+    // Create a map of existing dates
+    const trendMap = new Map();
+    trend.forEach(item => {
+      trendMap.set(item._id.date, {
+        totalAmount: Math.round(item.totalAmount),
+        count: item.count,
+      });
+    });
+
+    // Generate all dates in range
+    const result = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const existingData = trendMap.get(dateStr);
+      
+      result.push({
+        date: dateStr,
+        totalAmount: existingData?.totalAmount || 0,
+        count: existingData?.count || 0,
+      });
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
     return sendSuccess(res, result, "Transaction trend fetched successfully");
   } catch (error) {
@@ -229,6 +282,7 @@ function getTimeAgo(date) {
 
 /**
  * @route   GET /api/admin/dashboard/system-health
+ * @desc    Returns system health status
  */
 export const getSystemHealth = async (req, res) => {
   try {
@@ -260,6 +314,7 @@ export const getSystemHealth = async (req, res) => {
 
 /**
  * @route   GET /api/admin/dashboard/status-distribution
+ * @desc    Returns transaction status distribution
  */
 export const getTransactionStatusDistribution = async (req, res) => {
   try {
@@ -278,6 +333,127 @@ export const getTransactionStatusDistribution = async (req, res) => {
     }));
 
     return sendSuccess(res, formatted, "Transaction status distribution fetched successfully");
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * @route   GET /api/admin/dashboard/recent-transactions
+ * @desc    Returns recent transactions for dashboard
+ */
+export const getRecentTransactions = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+
+    const transactions = await Transaction.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select("transactionId customerName amount status paymentMethod createdAt");
+
+    return sendSuccess(res, transactions, "Recent transactions fetched successfully");
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * @route   GET /api/admin/dashboard/merchant-stats
+ * @desc    Returns merchant statistics
+ */
+export const getMerchantStats = async (req, res) => {
+  try {
+    const [totalMerchants, activeMerchants, pendingMerchants, blockedMerchants] = await Promise.all([
+      User.countDocuments({ role: "Merchant Administrator" }),
+      User.countDocuments({ role: "Merchant Administrator", status: "active" }),
+      User.countDocuments({ role: "Merchant Administrator", status: "pending" }),
+      User.countDocuments({ role: "Merchant Administrator", status: "blocked" }),
+    ]);
+
+    const stats = {
+      total: totalMerchants,
+      active: activeMerchants,
+      pending: pendingMerchants,
+      blocked: blockedMerchants,
+    };
+
+    return sendSuccess(res, stats, "Merchant stats fetched successfully");
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * @route   GET /api/admin/dashboard/payment-method-distribution
+ * @desc    Returns payment method distribution
+ */
+export const getPaymentMethodDistribution = async (req, res) => {
+  try {
+    const distribution = await Transaction.aggregate([
+      {
+        $group: {
+          _id: "$paymentMethod",
+          count: { $sum: 1 },
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+      { $sort: { count: -1 } },
+    ]);
+
+    const formatted = distribution.map((item) => ({
+      method: item._id || "Unknown",
+      count: item.count,
+      totalAmount: Math.round(item.totalAmount),
+    }));
+
+    return sendSuccess(res, formatted, "Payment method distribution fetched successfully");
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+/**
+ * @route   GET /api/admin/dashboard/daily-stats
+ * @desc    Returns daily statistics for today
+ */
+export const getDailyStats = async (req, res) => {
+  try {
+    const today = new Date();
+    const startOfToday = new Date(today.setHours(0, 0, 0, 0));
+    const endOfToday = new Date(today.setHours(23, 59, 59, 999));
+
+    const [totalAmount, transactionCount, successfulCount, failedCount] = await Promise.all([
+      Transaction.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: startOfToday, $lte: endOfToday }
+          }
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
+      Transaction.countDocuments({
+        createdAt: { $gte: startOfToday, $lte: endOfToday }
+      }),
+      Transaction.countDocuments({
+        status: "Successful",
+        createdAt: { $gte: startOfToday, $lte: endOfToday }
+      }),
+      Transaction.countDocuments({
+        status: "Failed",
+        createdAt: { $gte: startOfToday, $lte: endOfToday }
+      }),
+    ]);
+
+    const stats = {
+      date: startOfToday.toISOString().split('T')[0],
+      totalAmount: totalAmount[0]?.total || 0,
+      transactionCount: transactionCount,
+      successfulCount: successfulCount,
+      failedCount: failedCount,
+      successRate: transactionCount > 0 ? ((successfulCount / transactionCount) * 100).toFixed(1) : 0,
+    };
+
+    return sendSuccess(res, stats, "Daily stats fetched successfully");
   } catch (error) {
     return sendError(res, error);
   }

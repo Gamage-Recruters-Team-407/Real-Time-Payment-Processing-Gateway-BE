@@ -4,7 +4,8 @@ import {
   getTransactions, 
   getAlerts, 
   getAlertById, 
-  processTransaction
+  processTransaction,
+  deleteTransaction
 } from '../controllers/FraudController.js';
 import { handleAction } from '../controllers/actionController.js';
 import { handleWhitelist } from '../controllers/whitelistController.js';
@@ -16,12 +17,14 @@ import { startInvestigation, getInvestigationDetails, addNote, handleInvestigati
 import { getEntityLinkData } from '../controllers/entityLinkController.js';
 import { getRegionalVelocity } from '../controllers/regionalController.js';
 import { runLivePrediction } from '../controllers/predictController.js';
+import { getMerchantByName } from '../controllers/userController.js';
 
 const router = express.Router();
 
 // Dashboard & Lists
 router.get('/dashboard', getDashboardMetrics);
 router.get('/transactions', getTransactions);
+router.delete('/transactions/:id', deleteTransaction);
 router.get('/alerts', getAlerts);
 
 // Detail
@@ -42,6 +45,7 @@ router.post('/alerts/:id/investigate', startInvestigation);
 router.get('/investigation/:id', getInvestigationDetails);
 router.post('/investigation/:id/note', addNote);
 router.post('/investigation/:id/action', handleInvestigationAction);
+router.get('/merchant/:name', getMerchantByName);
 
 // Graph & Analytics APIs (Day 5)
 router.get('/entity-link/:id', getEntityLinkData);

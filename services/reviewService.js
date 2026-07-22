@@ -1,6 +1,8 @@
 import FraudLog from '../models/FraudLog.js';
 import Investigation from '../models/Investigation.js';
 import Blacklist from '../models/Blacklist.js';
+import Payment from '../models/Payment.js';
+import { updatePaymentStatusInService } from './paymentService.js';
 
 export const reviewService = {
   reviewTransaction: async (id, decision, notes, performedBy) => {
@@ -14,6 +16,16 @@ export const reviewService = {
     
     if (decisionUpper === 'APPROVE') {
       alert.status = 'CLEARED';
+      
+      // Release actual payment money
+      try {
+        const payment = await Payment.findOne({ $or: [{ paymentId: alert.transactionId }, { transactionId: alert.transactionId }] });
+        if (payment && payment.status !== 'COMPLETED') {
+          await updatePaymentStatusInService(payment.paymentId, { status: 'COMPLETED' });
+        }
+      } catch (e) {
+        console.error("Failed to release payment money:", e.message);
+      }
     } else if (decisionUpper === 'FLAG') {
       alert.status = 'ESCALATED'; 
       

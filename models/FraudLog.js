@@ -1,31 +1,41 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-const fraudLogSchema = new mongoose.Schema(
-    {
-        userId: {
-            type: String,
-            ref: "User",
-        },
+const actionSchema = new mongoose.Schema({
+  action: { type: String, required: true },
+  by: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now }
+});
 
-        transactionId: {
-            type: String,
-            ref: "Transaction",
-        },
+const fraudLogSchema = new mongoose.Schema({
+  transactionId: { type: String, required: true, unique: true },
+  userId: { type: String, required: true },
+  amount: { type: Number, required: true },
+  merchant: { type: String, required: true },
+  ip: { type: String },
+  deviceId: { type: String },
+  riskScore: { type: Number, required: true },
+  ruleScore: { type: Number },
+  mlScore: { type: Number },
+  status: { 
+    type: String, 
+    enum: ['CLEARED', 'LOW_RISK', 'MEDIUM_RISK', 'REVIEW', 'UNDER_REVIEW', 'HIGH_RISK', 'BLOCKED', 'ESCALATED'], 
+    default: 'REVIEW' 
+  },
+  alertReason: { type: String },
+  actions: [actionSchema],
+  investigation: {
+    caseId: { type: String },
+    notes: { type: String },
+    timeline: { type: Array, default: [] }
+  },
+  whitelisted: { type: Boolean, default: false },
+  location: { type: String },
+  lat: { type: Number },
+  lon: { type: Number }
+}, {
+  timestamps: true // Adds createdAt and updatedAt
+});
 
-        fraudType: {
-            type: String,
-            enum: ["Suspicious", "Unusual", "Potential Fraud"],
-        },
+const FraudLog = mongoose.model('FraudLog', fraudLogSchema);
 
-        description: {
-            type: String,
-        },
-
-        createdAt: {
-            type: Date,
-            default: Date.now,
-        }
-    }
-);
-
-export default mongoose.model("FraudLog", fraudLogSchema);
+export default FraudLog;

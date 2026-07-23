@@ -26,8 +26,6 @@ export const mlClient = {
       // Demo Override to ensure test data is perfectly mapped to the expected risk tiers
       if (transactionData.amount >= 100000 || transactionData.ip === '203.0.113.55') {
         return { verdict: 'BLOCK', probability: 0.99, risk_score: 99, rule_score: 100, reasons: ['High Amount / Known Blacklisted IP address'] };
-      } else if (transactionData.amount === 1200) {
-        return { verdict: 'BLOCK', probability: 0.96, risk_score: 96, rule_score: 95, reasons: ['Linked to suspicious entity (Shared Device/IP)'] };
       } else if (transactionData.amount === 320) {
         return { verdict: 'APPROVE', probability: 0.85, risk_score: 85, rule_score: 80, reasons: ['Suspicious pattern match (Account Takeover suspected)'] };
       } else if (transactionData.amount === 4500) {
@@ -61,11 +59,6 @@ export const mlClient = {
         riskScore = 99;
         ruleScore = 100;
         reasons.push('High Amount / Known Blacklisted IP address');
-        verdict = 'BLOCK';
-      } else if (transactionData.amount === 1200) {
-        riskScore = 96;
-        ruleScore = 95;
-        reasons.push('Linked to suspicious entity (Shared Device/IP)');
         verdict = 'BLOCK';
       } else if (transactionData.amount === 320) {
         riskScore = 85;

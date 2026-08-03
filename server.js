@@ -20,6 +20,8 @@ import userRoutes from "./routes/userRoutes.js";
 import userPaymentHistoryRoutes from "./routes/userPaymentHistoryRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js"; 
+import webhookRoutes from "./routes/webhookRoutes.js";
+
 
 import dns from "dns";
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -79,6 +81,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/user-payment-history", userPaymentHistoryRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes); 
+app.use("/api/webhook", webhookRoutes);
+
 
 const PORT = process.env.PORT || 5000;
 

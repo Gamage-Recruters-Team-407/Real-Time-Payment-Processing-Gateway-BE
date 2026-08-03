@@ -8,16 +8,25 @@ import FraudLog from '../models/FraudLog.js';
 router.post('/alert', async (req, res) => {
   const alertData = req.body;
   
+  if (!alertData || !alertData.transactionId || alertData.status == null || alertData.riskScore == null || !alertData.alertReason) {
+    return res.status(400).json({ success: false, error: 'Validation error' });
+  }
+  
   try {
     // Update the existing FraudLog
-    await FraudLog.findOneAndUpdate(
+    const updatedLog = await FraudLog.findOneAndUpdate(
       { transactionId: alertData.transactionId },
       { 
         status: alertData.status, 
         riskScore: alertData.riskScore,
         alertReason: alertData.alertReason
-      }
+      },
+      { new: true }
     );
+
+    if (!updatedLog) {
+      return res.status(404).json({ success: false, error: 'Invalid transaction error' });
+    }
 
     // Get io instance attached to app
     const io = req.app.get('io');
